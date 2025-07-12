@@ -96,6 +96,27 @@ func NewFSM(initial State) *FSM {
 	return fsm
 }
 
+func (f *FSM) Clone() *FSM {
+	fsm := &FSM{
+		initial:      f.initial,
+		current:      f.initial,
+		history:      NewMapSafe[int64, State](),
+		transitions:  f.transitions,
+		onEnter:      f.onEnter,
+		onExit:       f.onExit,
+		onTransition: f.onTransition,
+		ctx: &Context{
+			State:  f.initial,
+			Data:   NewMapSafe[String, any](),
+			Values: NewMapSafe[String, any](),
+		},
+	}
+
+	fsm.history.Set(0, f.initial)
+
+	return fsm
+}
+
 // Context returns the FSM's context.
 func (f *FSM) Context() *Context {
 	return f.ctx
