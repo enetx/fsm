@@ -128,6 +128,7 @@ func main() {
 		}
 	}
 
-	// Print the full list of visited states
+	// Print the history of all visited states so far.
+	// Useful for debugging, logging, or audit purposes.
 	fsm.History().Println()
 }

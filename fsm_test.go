@@ -1,6 +1,7 @@
 package fsm_test
 
 import (
+	"fmt"
 	"testing"
 
 	. "github.com/enetx/fsm"
@@ -104,4 +105,56 @@ func TestFSM_Reset(t *testing.T) {
 	fsm.Reset()
 	assertEqual(t, fsm.Current(), State("a"))
 	assertTrue(t, fsm.Context().Data.Get("x").IsNone())
+}
+
+func TestFSM_OnTransition(t *testing.T) {
+	var called bool
+	var from, to State
+	var event Event
+
+	fsm := NewFSM("a").
+		Transition("a", "go", "b").
+		OnTransition(func(f, t State, e Event, _ *Context) error {
+			called = true
+			from, to, event = f, t, e
+			return nil
+		})
+
+	assertNoError(t, fsm.Trigger("go"))
+	assertTrue(t, called)
+	assertEqual(t, from, "a")
+	assertEqual(t, to, "b")
+	assertEqual(t, event, "go")
+}
+
+func TestFSM_History(t *testing.T) {
+	fsm := NewFSM("x").
+		Transition("x", "next", "y").
+		Transition("y", "next", "z")
+
+	assertNoError(t, fsm.Trigger("next"))
+	assertNoError(t, fsm.Trigger("next"))
+
+	h := fsm.History()
+	assertEqual(t, h.Len(), 3)
+	assertEqual(t, h[0], State("x"))
+	assertEqual(t, h[1], State("y"))
+	assertEqual(t, h[2], State("z"))
+}
+
+func TestFSM_OnEnterError(t *testing.T) {
+	fsm := NewFSM("s").
+		Transition("s", "go", "t").
+		OnEnter("t", func(*Context) error {
+			return fmt.Errorf("fail")
+		})
+
+	err := fsm.Trigger("go")
+	assertError(t, err)
+}
+
+func TestFSM_InvalidEvent(t *testing.T) {
+	fsm := NewFSM("only")
+	err := fsm.Trigger("nope")
+	assertError(t, err)
 }

@@ -5,8 +5,10 @@ package fsm
 
 import (
 	"fmt"
+	"sync/atomic"
 
 	. "github.com/enetx/g"
+	"github.com/enetx/g/cmp"
 )
 
 type (
@@ -43,13 +45,15 @@ type Context struct {
 }
 
 type FSM struct {
-	initial      State
-	current      State
-	history      Slice[State]
-	transitions  *MapSafe[State, Slice[transition]]
-	onEnter      *MapSafe[State, Slice[Callback]]
-	onExit       *MapSafe[State, Slice[Callback]]
-	onTransition Slice[TransitionHook]
+	initial         State
+	current         State
+	history         *MapSafe[int64, State]
+	transitions     *MapSafe[State, Slice[transition]]
+	onEnter         *MapSafe[State, Slice[Callback]]
+	onExit          *MapSafe[State, Slice[Callback]]
+	onTransition    *MapSafe[int64, TransitionHook]
+	historyCount    atomic.Int64
+	transitionCount atomic.Int64
 
 	ctx *Context
 }
@@ -72,20 +76,24 @@ type FSM struct {
 //	fsm.Context().Input = "ok"
 //	fsm.Trigger("proceed")
 func NewFSM(initial State) *FSM {
-	return &FSM{
+	fsm := &FSM{
 		initial:      initial,
 		current:      initial,
-		history:      Slice[State]{initial},
+		history:      NewMapSafe[int64, State](),
 		transitions:  NewMapSafe[State, Slice[transition]](),
 		onEnter:      NewMapSafe[State, Slice[Callback]](),
 		onExit:       NewMapSafe[State, Slice[Callback]](),
-		onTransition: NewSlice[TransitionHook](),
+		onTransition: NewMapSafe[int64, TransitionHook](),
 		ctx: &Context{
 			State:  initial,
 			Data:   NewMapSafe[String, any](),
 			Values: NewMapSafe[String, any](),
 		},
 	}
+
+	fsm.history.Set(0, initial)
+
+	return fsm
 }
 
 // Context returns the FSM's context.
@@ -100,7 +108,11 @@ func (f *FSM) Current() State {
 
 // History returns the list of previously visited states.
 func (f *FSM) History() Slice[State] {
-	return f.history
+	ordered := NewMapOrd[int64, State]()
+	f.history.Iter().ForEach(func(id int64, state State) { ordered.Set(id, state) })
+	ordered.SortByKey(cmp.Cmp)
+
+	return ordered.Values()
 }
 
 // SetContext allows injecting an external context into the FSM.
@@ -112,10 +124,16 @@ func (f *FSM) SetContext(ctx *Context) {
 // Reset resets the FSM to its initial state and clears all context.
 func (f *FSM) Reset() {
 	f.current = f.initial
-	f.ctx.State = f.initial
-	f.ctx.Data = NewMapSafe[String, any]()
-	f.ctx.Values = NewMapSafe[String, any]()
-	f.ctx.Input = nil
+
+	f.ctx = &Context{
+		State:  f.initial,
+		Data:   NewMapSafe[String, any](),
+		Values: NewMapSafe[String, any](),
+	}
+
+	f.history.Clear()
+	f.history.Set(0, f.initial)
+	f.historyCount.Store(0)
 }
 
 // SetState sets the current state manually, without triggering callbacks.
@@ -161,7 +179,7 @@ func (f *FSM) OnExit(state State, cb Callback) *FSM {
 // OnTransition registers a global transition hook called on every successful transition.
 // Called after exit callbacks and before enter callbacks.
 func (f *FSM) OnTransition(hook TransitionHook) *FSM {
-	f.onTransition.Push(hook)
+	f.onTransition.Set(f.transitionCount.Add(1), hook)
 	return f
 }
 
@@ -195,9 +213,9 @@ func (f *FSM) Trigger(event Event) error {
 	previous := f.current
 	f.current = t.to
 	f.ctx.State = t.to
-	f.history.Push(t.to)
+	f.history.Set(f.historyCount.Add(1), t.to)
 
-	for hook := range f.onTransition.Iter() {
+	for hook := range f.onTransition.Values().Iter() {
 		if err := hook(previous, t.to, t.event, f.ctx); err != nil {
 			return err
 		}
