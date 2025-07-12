@@ -242,7 +242,14 @@ func (f *FSM) Trigger(event Event) error {
 		}
 	}
 
-	if cbs := f.onEnter.Get(t.to); cbs.IsSome() {
+	return f.CallEnter(t.to)
+}
+
+// CallEnter manually invokes all OnEnter callbacks associated with the given state.
+// This is useful for explicitly entering a state without triggering a transition event.
+// It does not change the current state or modify FSM history.
+func (f *FSM) CallEnter(state State) error {
+	if cbs := f.onEnter.Get(state); cbs.IsSome() {
 		for cb := range cbs.Some().Iter() {
 			if err := cb(f.ctx); err != nil {
 				return err
