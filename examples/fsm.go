@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"os"
 	"time"
 
@@ -23,13 +24,18 @@ func main() {
 		TransitionWhen("ask_age", "input", "ask_lang", func(ctx *Context) bool {
 			return ctx.Input.(String).ToInt().IsOk()
 		}).
-		// On invalid age input, stay in ask_age
-		Transition("ask_age", "invalid", "ask_age").
 		// After language input, go to confirm
 		Transition("ask_lang", "input", "confirm").
-		// User confirms data with "yes" or restarts with "no"
-		Transition("confirm", "yes", "done").
-		Transition("confirm", "no", "ask_name").
+		// User confirms data with "yes"
+		TransitionWhen("confirm", "confirm_input", "done", func(ctx *Context) bool {
+			input := ctx.Input.(String).Lower()
+			return input.Eq("y") || input.Eq("yes")
+		}).
+		// User confirms data with "no"
+		TransitionWhen("confirm", "confirm_input", "ask_name", func(ctx *Context) bool {
+			input := ctx.Input.(String).Lower()
+			return input.Eq("n") || input.Eq("no")
+		}).
 		// State entry callbacks:
 		// Ask name and record session start time
 		OnEnter("ask_name", func(ctx *Context) error {
@@ -71,16 +77,20 @@ func main() {
 			return nil
 		})
 
-	fsm.OnTransition(func(from, to State, event Event, _ *Context) error {
-		// Called on every successful transition:
-		// - after OnExit callbacks of `from`
-		// - before OnEnter callbacks of `to`
-		// You can use this hook to:
-		// - log transitions
-		// - validate consistency between states
-		// - collect metrics or analytics
-		// - trigger side effects like saving to DB
+	fsm.OnTransition(func(from, to State, event Event, ctx *Context) error {
 		Println("[transition] {} → {} via event {}", from, to, event)
+
+		if event == "input" {
+			switch from {
+			case "ask_name":
+				ctx.Data.Set("name", ctx.Input)
+			case "ask_age":
+				ctx.Data.Set("age", ctx.Input)
+			case "ask_lang":
+				ctx.Data.Set("lang", ctx.Input)
+			}
+		}
+
 		return nil
 	})
 
@@ -98,33 +108,30 @@ func main() {
 		input := String(scanner.Text()).Trim()
 		ctx.Input = input
 
+		var err error
+
 		switch fsm.Current() {
-		// Handle name input
-		case "ask_name":
-			ctx.Data.Set("name", input)
-			fsm.Trigger("input")
-			// Validate age input and decide transition
-		case "ask_age":
-			age := input.ToInt()
-			switch {
-			case age.IsOk():
-				ctx.Data.Set("age", input)
-				fsm.Trigger("input")
-			case age.IsErr():
-				Println("Please enter a valid number.")
-				fsm.Trigger("invalid")
-			}
-		// Handle language input
-		case "ask_lang":
-			ctx.Data.Set("lang", input)
-			fsm.Trigger("input")
-			// Confirm user data
+		case "ask_name", "ask_age", "ask_lang":
+			err = fsm.Trigger("input")
 		case "confirm":
-			if input.Lower().Eq("y") || input.Lower().Eq("yes") {
-				fsm.Trigger("yes")
-			} else {
-				fsm.Trigger("no")
+			err = fsm.Trigger("confirm_input")
+		}
+
+		if err != nil {
+			var invTransErr *ErrInvalidTransition
+
+			if errors.As(err, &invTransErr) {
+				switch invTransErr.From {
+				case "ask_age":
+					Println("Please enter a valid number.")
+				case "confirm":
+					Println("Please enter 'y' (yes) or 'n' (no).")
+				}
+
+				continue
 			}
+
+			Println("An unexpected error occurred: {}", err)
 		}
 	}
 

@@ -5,10 +5,9 @@ package fsm
 
 import (
 	"fmt"
-	"sync/atomic"
+	"sync"
 
 	. "github.com/enetx/g"
-	"github.com/enetx/g/cmp"
 )
 
 type (
@@ -45,17 +44,16 @@ type Context struct {
 }
 
 type FSM struct {
-	initial         State
-	current         State
-	history         *MapSafe[int64, State]
-	transitions     *MapSafe[State, Slice[transition]]
-	onEnter         *MapSafe[State, Slice[Callback]]
-	onExit          *MapSafe[State, Slice[Callback]]
-	onTransition    *MapSafe[int64, TransitionHook]
-	historyCount    atomic.Int64
-	transitionCount atomic.Int64
+	initial      State
+	current      State
+	history      Slice[State]
+	transitions  *MapSafe[State, Slice[transition]]
+	onEnter      *MapSafe[State, Slice[Callback]]
+	onExit       *MapSafe[State, Slice[Callback]]
+	onTransition Slice[TransitionHook]
 
 	ctx *Context
+	mu  sync.RWMutex
 }
 
 // NewFSM creates a new FSM with the given initial state.
@@ -76,31 +74,27 @@ type FSM struct {
 //	fsm.Context().Input = "ok"
 //	fsm.Trigger("proceed")
 func NewFSM(initial State) *FSM {
-	fsm := &FSM{
+	return &FSM{
 		initial:      initial,
 		current:      initial,
-		history:      NewMapSafe[int64, State](),
+		history:      Slice[State]{initial},
 		transitions:  NewMapSafe[State, Slice[transition]](),
 		onEnter:      NewMapSafe[State, Slice[Callback]](),
 		onExit:       NewMapSafe[State, Slice[Callback]](),
-		onTransition: NewMapSafe[int64, TransitionHook](),
+		onTransition: NewSlice[TransitionHook](),
 		ctx: &Context{
 			State:  initial,
 			Data:   NewMapSafe[String, any](),
 			Values: NewMapSafe[String, any](),
 		},
 	}
-
-	fsm.history.Set(0, initial)
-
-	return fsm
 }
 
 func (f *FSM) Clone() *FSM {
-	fsm := &FSM{
+	return &FSM{
 		initial:      f.initial,
 		current:      f.initial,
-		history:      NewMapSafe[int64, State](),
+		history:      Slice[State]{f.initial},
 		transitions:  f.transitions,
 		onEnter:      f.onEnter,
 		onExit:       f.onExit,
@@ -111,39 +105,46 @@ func (f *FSM) Clone() *FSM {
 			Values: NewMapSafe[String, any](),
 		},
 	}
-
-	fsm.history.Set(0, f.initial)
-
-	return fsm
 }
 
 // Context returns the FSM's context.
 func (f *FSM) Context() *Context {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
 	return f.ctx
 }
 
 // Current returns the FSM's current state.
 func (f *FSM) Current() State {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
 	return f.current
 }
 
 // History returns the list of previously visited states.
 func (f *FSM) History() Slice[State] {
-	ordered := NewMapOrd[int64, State]()
-	f.history.Iter().ForEach(func(id int64, state State) { ordered.Set(id, state) })
-	ordered.SortByKey(cmp.Cmp)
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 
-	return ordered.Values()
+	return f.history.Clone()
 }
 
 // SetContext allows injecting an external context into the FSM.
 func (f *FSM) SetContext(ctx *Context) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	f.ctx = ctx
 	ctx.State = f.current
 }
 
 // Reset resets the FSM to its initial state and clears all context.
 func (f *FSM) Reset() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	f.current = f.initial
 
 	f.ctx = &Context{
@@ -152,13 +153,14 @@ func (f *FSM) Reset() {
 		Values: NewMapSafe[String, any](),
 	}
 
-	f.history.Clear()
-	f.history.Set(0, f.initial)
-	f.historyCount.Store(0)
+	f.history = Slice[State]{f.initial}
 }
 
 // SetState sets the current state manually, without triggering callbacks.
 func (f *FSM) SetState(s State) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	f.current = s
 	f.ctx.State = s
 }
@@ -200,16 +202,22 @@ func (f *FSM) OnExit(state State, cb Callback) *FSM {
 // OnTransition registers a global transition hook called on every successful transition.
 // Called after exit callbacks and before enter callbacks.
 func (f *FSM) OnTransition(hook TransitionHook) *FSM {
-	f.onTransition.Set(f.transitionCount.Add(1), hook)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.onTransition.Push(hook)
 	return f
 }
 
 // Trigger attempts to transition using the given event from the current state.
 // It evaluates guards, invokes exit/enter callbacks, and updates current state.
 func (f *FSM) Trigger(event Event) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	transitions := f.transitions.Get(f.current)
 	if transitions.IsNone() {
-		return fmt.Errorf("no transition for event %q from state %q", event, f.current)
+		return &ErrInvalidTransition{From: f.current, Event: event}
 	}
 
 	matched := transitions.Some().
@@ -218,31 +226,64 @@ func (f *FSM) Trigger(event Event) error {
 		Collect()
 
 	if matched.Empty() {
-		return fmt.Errorf("no transition for event %q from state %q", event, f.current)
+		return &ErrInvalidTransition{From: f.current, Event: event}
 	}
 
 	t := matched[0]
+	previousState := f.current
+	nextState := t.to
 
-	if cbs := f.onExit.Get(f.current); cbs.IsSome() {
+	if cbs := f.onExit.Get(previousState); cbs.IsSome() {
 		for cb := range cbs.Some().Iter() {
-			if err := cb(f.ctx); err != nil {
+			if err := f.executeCallback(cb, "OnExit", previousState); err != nil {
 				return err
 			}
 		}
 	}
 
-	previous := f.current
-	f.current = t.to
-	f.ctx.State = t.to
-	f.history.Set(f.historyCount.Add(1), t.to)
-
-	for hook := range f.onTransition.Values().Iter() {
-		if err := hook(previous, t.to, t.event, f.ctx); err != nil {
+	for hook := range f.onTransition.Iter() {
+		if err := func() (err error) {
+			defer func() {
+				if r := recover(); r != nil {
+					err = &ErrCallback{HookType: "OnTransition", Err: fmt.Errorf("panic: %v", r)}
+				}
+			}()
+			if hookErr := hook(previousState, nextState, event, f.ctx); hookErr != nil {
+				err = &ErrCallback{HookType: "OnTransition", Err: hookErr}
+			}
+			return err
+		}(); err != nil {
 			return err
 		}
 	}
 
-	return f.CallEnter(t.to)
+	if cbs := f.onEnter.Get(nextState); cbs.IsSome() {
+		for cb := range cbs.Some().Iter() {
+			if err := f.executeCallback(cb, "OnEnter", nextState); err != nil {
+				return err
+			}
+		}
+	}
+
+	f.current = nextState
+	f.ctx.State = nextState
+	f.history.Push(nextState)
+
+	return nil
+}
+
+func (f *FSM) executeCallback(cb Callback, hookType string, state State) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = &ErrCallback{HookType: hookType, State: state, Err: fmt.Errorf("panic: %v", r)}
+		}
+	}()
+
+	if cbErr := cb(f.ctx); cbErr != nil {
+		err = &ErrCallback{HookType: hookType, State: state, Err: cbErr}
+	}
+
+	return err
 }
 
 // CallEnter manually invokes all OnEnter callbacks associated with the given state.
@@ -251,7 +292,7 @@ func (f *FSM) Trigger(event Event) error {
 func (f *FSM) CallEnter(state State) error {
 	if cbs := f.onEnter.Get(state); cbs.IsSome() {
 		for cb := range cbs.Some().Iter() {
-			if err := cb(f.ctx); err != nil {
+			if err := f.executeCallback(cb, "OnEnter", state); err != nil {
 				return err
 			}
 		}

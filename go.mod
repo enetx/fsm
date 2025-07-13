@@ -1,6 +1,6 @@
 module github.com/enetx/fsm
 
-go 1.24.5
+go 1.24
 
 require github.com/enetx/g v1.0.173
 
