@@ -13,8 +13,6 @@ func (e *ErrInvalidTransition) Error() string {
 
 type ErrCallback struct {
 	HookType string
-	From     State
-	To       State
 	State    State
 	Err      error
 }
