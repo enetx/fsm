@@ -28,3 +28,12 @@ func (e *ErrCallback) Error() string {
 func (e *ErrCallback) Unwrap() error {
 	return e.Err
 }
+
+// ErrUnknownState is returned when trying to unmarshal a state not defined in the FSM.
+type ErrUnknownState struct {
+	State State
+}
+
+func (e *ErrUnknownState) Error() string {
+	return fmt.Sprintf("unknown state '%s' encountered during unmarshaling", e.State)
+}

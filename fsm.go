@@ -4,6 +4,7 @@
 package fsm
 
 import (
+	"encoding/json"
 	"fmt"
 	"sync"
 
@@ -54,6 +55,14 @@ type FSM struct {
 
 	ctx *Context
 	mu  sync.RWMutex
+}
+
+// FSMState is a serializable representation of the FSM's state.
+type FSMState struct {
+	Current State            `json:"current"`
+	History Slice[State]     `json:"history"`
+	Data    Map[String, any] `json:"data"`
+	Values  Map[String, any] `json:"values"`
 }
 
 // NewFSM creates a new FSM with the given initial state.
@@ -163,6 +172,30 @@ func (f *FSM) SetState(s State) {
 
 	f.current = s
 	f.ctx.State = s
+}
+
+// states is the internal, non-locking implementation for retrieving defined states.
+func (f *FSM) states() Slice[State] {
+	stateSet := NewSet[State]()
+	stateSet.Insert(f.initial)
+
+	for state, transitions := range f.transitions.Iter() {
+		stateSet.Insert(state)
+		for transition := range transitions.Iter() {
+			stateSet.Insert(transition.to)
+		}
+	}
+
+	return stateSet.ToSlice()
+}
+
+// States returns a slice of all unique states defined in the FSM's transitions.
+// This method is safe for concurrent use.
+func (f *FSM) States() Slice[State] {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
+	return f.states()
 }
 
 // Transition adds a basic transition (without guard) from -> event -> to.
@@ -297,6 +330,52 @@ func (f *FSM) CallEnter(state State) error {
 			}
 		}
 	}
+
+	return nil
+}
+
+// MarshalJSON implements the json.Marshaler interface.
+// It saves the FSM's current state, history, and context data.
+func (f *FSM) MarshalJSON() ([]byte, error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
+	state := FSMState{
+		Current: f.current,
+		History: f.history.Clone(),
+		Data:    f.ctx.Data.Iter().Collect(),
+		Values:  f.ctx.Values.Iter().Collect(),
+	}
+
+	return json.Marshal(state)
+}
+
+// UnmarshalJSON implements the json.Unmarshaler interface.
+func (f *FSM) UnmarshalJSON(data []byte) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	var state FSMState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return fmt.Errorf("failed to unmarshal fsm state: %w", err)
+	}
+
+	states := f.states()
+	if !states.Contains(state.Current) {
+		return &ErrUnknownState{State: state.Current}
+	}
+
+	for state := range state.History.Iter() {
+		if !states.Contains(state) {
+			return &ErrUnknownState{State: state}
+		}
+	}
+
+	f.current = state.Current
+	f.history = state.History
+	f.ctx.State = state.Current
+	f.ctx.Data = state.Data.ToMapSafe()
+	f.ctx.Values = state.Values.ToMapSafe()
 
 	return nil
 }
