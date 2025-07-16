@@ -54,7 +54,7 @@ func TestFSM_Guard(t *testing.T) {
 	called := false
 	testFSM := NewFSM("ready").
 		TransitionWhen("ready", "go", "done", func(ctx *Context) bool {
-			return ctx.Values.Get("ok").UnwrapOr(false).(bool)
+			return ctx.Meta.Get("ok").UnwrapOr(false).(bool)
 		}).
 		OnEnter("done", func(*Context) error {
 			called = true
@@ -62,11 +62,11 @@ func TestFSM_Guard(t *testing.T) {
 		})
 
 	ctx := testFSM.Context()
-	ctx.Values.Set("ok", false)
+	ctx.Meta.Set("ok", false)
 	assertError(t, testFSM.Trigger("go"))
 	assertFalse(t, called)
 
-	ctx.Values.Set("ok", true)
+	ctx.Meta.Set("ok", true)
 	assertNoError(t, testFSM.Trigger("go"))
 	assertTrue(t, called)
 	assertEqual(t, testFSM.Current(), State("done"))

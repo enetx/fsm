@@ -39,7 +39,7 @@ func main() {
 		// State entry callbacks:
 		// Ask name and record session start time
 		OnEnter("ask_name", func(ctx *Context) error {
-			ctx.Values.Set("started_at", time.Now().Format(time.RFC822))
+			ctx.Meta.Set("started_at", time.Now().Format(time.RFC822))
 			Println("Hi! What's your name?")
 			return nil
 		}).
@@ -61,19 +61,21 @@ func main() {
 		}).
 		// Display confirmation screen with entered data
 		OnEnter("confirm", func(ctx *Context) error {
-			name := ctx.Data.Get("name").UnwrapOr(String("<anon>"))
-			age := ctx.Data.Get("age").UnwrapOr(String("<unknown>"))
-			lang := ctx.Data.Get("lang").UnwrapOr(String("<none>"))
+			name := ctx.Data.Get("name").UnwrapOr("<anon>")
+			age := ctx.Data.Get("age").UnwrapOr("<unknown>")
+			lang := ctx.Data.Get("lang").UnwrapOr("<none>")
 			Println("\nPlease confirm:\n- Name: {}\n- Age: {}\n- Language: {}(y/n): ", name, age, lang)
 			return nil
 		}).
 		// Final message when done
 		OnEnter("done", func(ctx *Context) error {
-			name := ctx.Data.Get("name").UnwrapOr(String("<anon>"))
-			age := ctx.Data.Get("age").UnwrapOr(String("<unknown>"))
-			lang := ctx.Data.Get("lang").UnwrapOr(String("<none>"))
-			started := ctx.Values.Get("started_at").UnwrapOrDefault()
+			name := ctx.Data.Get("name").UnwrapOr("<anon>")
+			age := ctx.Data.Get("age").UnwrapOr("<unknown>")
+			lang := ctx.Data.Get("lang").UnwrapOr("<none>")
+			started := ctx.Meta.Get("started_at").UnwrapOrDefault()
+
 			Println("\nThank you, {}! Data saved.\n- Age: {}\n- Language: {}\nStarted at: {}", name, age, lang, started)
+
 			return nil
 		})
 
@@ -95,7 +97,6 @@ func main() {
 	})
 
 	// Get FSM context and start the flow
-	ctx := fsm.Context()
 	fsm.Trigger("next")
 
 	// Main input loop until FSM reaches "done"
@@ -106,15 +107,14 @@ func main() {
 		}
 
 		input := String(scanner.Text()).Trim()
-		ctx.Input = input
 
 		var err error
 
 		switch fsm.Current() {
 		case "ask_name", "ask_age", "ask_lang":
-			err = fsm.Trigger("input")
+			err = fsm.Trigger("input", input)
 		case "confirm":
-			err = fsm.Trigger("confirm_input")
+			err = fsm.Trigger("confirm_input", input)
 		}
 
 		if err != nil {

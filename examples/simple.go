@@ -48,7 +48,6 @@ func main() {
 		}
 
 		input := String(scanner.Text()).Trim()
-		ctx.Input = input
 
 		switch fsm.Current() {
 		case "ask_name":
