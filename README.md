@@ -238,6 +238,7 @@ func main() {
     fsmachine.ToDOT().Println() // Copy this output
 }
 ```
+<img width="2091" height="800" alt="graphviz" src="https://github.com/user-attachments/assets/dc021969-5a82-4260-9cfe-462d21c84fa8" />
 
 ## Contributing
 
