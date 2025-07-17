@@ -186,8 +186,8 @@ func TestFSM_SetState(t *testing.T) {
 	exitCalled := false
 
 	fsm := NewFSM("a").
-		OnEnter("b", func(ctx *Context) error { enterCalled = true; return nil }).
-		OnExit("a", func(ctx *Context) error { exitCalled = true; return nil })
+		OnEnter("b", func(*Context) error { enterCalled = true; return nil }).
+		OnExit("a", func(*Context) error { exitCalled = true; return nil })
 
 	fsm.SetState("b")
 
@@ -200,7 +200,7 @@ func TestFSM_SetState(t *testing.T) {
 func TestFSM_CallEnter(t *testing.T) {
 	enterCalled := false
 	fsm := NewFSM("a").
-		OnEnter("a", func(ctx *Context) error { enterCalled = true; return nil })
+		OnEnter("a", func(*Context) error { enterCalled = true; return nil })
 
 	assertNoError(t, fsm.CallEnter("a"))
 
@@ -246,7 +246,7 @@ func TestFSM_SerializationUnknownState(t *testing.T) {
 func TestFSM_PanicRecovery(t *testing.T) {
 	fsm := NewFSM("a").
 		Transition("a", "go", "b").
-		OnEnter("b", func(ctx *Context) error {
+		OnEnter("b", func(*Context) error {
 			panic("something went wrong")
 		})
 
@@ -266,4 +266,40 @@ func TestFSM_States(t *testing.T) {
 
 	assertEqual(t, SetOf(states...).Len(), expected.Len())
 	assertTrue(t, SetOf(states...).Eq(expected))
+}
+
+func TestFSM_TriggerInput(t *testing.T) {
+	var received any
+
+	fsm := NewFSM("x").
+		Transition("x", "go", "y").
+		OnEnter("y", func(ctx *Context) error {
+			received = ctx.Input
+			return nil
+		})
+
+	assertNoError(t, fsm.Trigger("go", "my_input"))
+	assertEqual(t, received, "my_input")
+}
+
+func TestFSM_OnExitError(t *testing.T) {
+	fsm := NewFSM("a").
+		Transition("a", "go", "b").
+		OnExit("a", func(*Context) error {
+			return fmt.Errorf("exit error")
+		})
+
+	err := fsm.Trigger("go")
+	assertError(t, err)
+	assertTrue(t, strings.Contains(err.Error(), "exit error"))
+}
+
+func TestFSM_OnTransitionError(t *testing.T) {
+	fsm := NewFSM("a").
+		Transition("a", "go", "b").
+		OnTransition(func(_, _ State, _ Event, _ *Context) error { return fmt.Errorf("hook failed") })
+
+	err := fsm.Trigger("go")
+	assertError(t, err)
+	assertTrue(t, strings.Contains(err.Error(), "hook failed"))
 }
