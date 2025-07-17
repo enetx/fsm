@@ -1,7 +1,9 @@
 package fsm_test
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	. "github.com/enetx/fsm"
@@ -9,30 +11,35 @@ import (
 )
 
 func assertEqual[T comparable](t *testing.T, got, want T) {
+	t.Helper()
 	if got != want {
 		t.Fatalf("expected %v, got %v", want, got)
 	}
 }
 
 func assertNoError(t *testing.T, err error) {
+	t.Helper()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func assertError(t *testing.T, err error) {
+	t.Helper()
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
 }
 
 func assertTrue(t *testing.T, cond bool) {
+	t.Helper()
 	if !cond {
 		t.Fatalf("expected true, got false")
 	}
 }
 
 func assertFalse(t *testing.T, cond bool) {
+	t.Helper()
 	if cond {
 		t.Fatalf("expected false, got true")
 	}
@@ -157,4 +164,106 @@ func TestFSM_InvalidEvent(t *testing.T) {
 	fsm := NewFSM("only")
 	err := fsm.Trigger("nope")
 	assertError(t, err)
+}
+
+func TestFSM_Clone(t *testing.T) {
+	template := NewFSM("a").
+		Transition("a", "next", "b")
+
+	fsm1 := template.Clone()
+	fsm2 := template.Clone()
+
+	assertNoError(t, fsm1.Trigger("next"))
+
+	// Verify that fsm1's state changed, but fsm2 and the template remain unchanged.
+	assertEqual(t, fsm1.Current(), State("b"))
+	assertEqual(t, fsm2.Current(), State("a"))
+	assertEqual(t, template.Current(), State("a"))
+}
+
+func TestFSM_SetState(t *testing.T) {
+	enterCalled := false
+	exitCalled := false
+
+	fsm := NewFSM("a").
+		OnEnter("b", func(ctx *Context) error { enterCalled = true; return nil }).
+		OnExit("a", func(ctx *Context) error { exitCalled = true; return nil })
+
+	fsm.SetState("b")
+
+	// SetState should change the state without triggering callbacks.
+	assertEqual(t, fsm.Current(), State("b"))
+	assertFalse(t, enterCalled)
+	assertFalse(t, exitCalled)
+}
+
+func TestFSM_CallEnter(t *testing.T) {
+	enterCalled := false
+	fsm := NewFSM("a").
+		OnEnter("a", func(ctx *Context) error { enterCalled = true; return nil })
+
+	assertNoError(t, fsm.CallEnter("a"))
+
+	// CallEnter should trigger the callback but not change the state or history.
+	assertTrue(t, enterCalled)
+	assertEqual(t, fsm.Current(), State("a"))
+	assertEqual(t, fsm.History().Len(), 1)
+}
+
+func TestFSM_Serialization(t *testing.T) {
+	template := NewFSM("a").
+		Transition("a", "next", "b")
+
+	fsm := template.Clone()
+	fsm.Context().Data.Set("user_id", 123)
+	assertNoError(t, fsm.Trigger("next"))
+
+	// Marshal the FSM to JSON.
+	jsonData, err := json.Marshal(fsm)
+	assertNoError(t, err)
+
+	// Create a new FSM and unmarshal the state into it.
+	newFSM := template.Clone()
+	err = json.Unmarshal(jsonData, newFSM)
+	assertNoError(t, err)
+
+	// Verify the state was restored correctly.
+	assertEqual(t, newFSM.Current(), State("b"))
+	assertEqual(t, newFSM.History().Len(), 2)
+	assertEqual(t, newFSM.History()[1], State("b"))
+	assertEqual(t, newFSM.Context().Data.Get("user_id").Unwrap().(float64), 123)
+}
+
+func TestFSM_SerializationUnknownState(t *testing.T) {
+	fsm := NewFSM("a").Transition("a", "next", "b")
+	invalidJSON := `{"current": "unknown_state", "history": ["a"]}`
+
+	err := json.Unmarshal([]byte(invalidJSON), fsm)
+	assertError(t, err)
+	assertTrue(t, strings.Contains(err.Error(), "unknown state"))
+}
+
+func TestFSM_PanicRecovery(t *testing.T) {
+	fsm := NewFSM("a").
+		Transition("a", "go", "b").
+		OnEnter("b", func(ctx *Context) error {
+			panic("something went wrong")
+		})
+
+	err := fsm.Trigger("go")
+	assertError(t, err)
+	assertTrue(t, strings.Contains(err.Error(), "panic"))
+}
+
+func TestFSM_States(t *testing.T) {
+	fsm := NewFSM("a").
+		Transition("a", "to_b", "b").
+		Transition("b", "to_c", "c").
+		Transition("b", "to_a", "a")
+
+	states := fsm.States()
+	expected := SetOf[State]("a", "b", "c")
+
+	assertEqual(t, SetOf(states...).Len(), expected.Len())
+	assertTrue(t, SetOf(states...).Eq(expected))
 }

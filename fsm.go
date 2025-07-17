@@ -193,6 +193,7 @@ func (f *FSM) TransitionWhen(from State, event Event, to State, guard GuardFunc)
 	entry.Transform(func(s Slice[transition]) Slice[transition] {
 		return s.Append(transition{event: event, to: to, guard: guard})
 	})
+
 	return f
 }
 
@@ -201,6 +202,7 @@ func (f *FSM) OnEnter(state State, cb Callback) *FSM {
 	entry := f.onEnter.Entry(state)
 	entry.OrDefault()
 	entry.Transform(func(cbs Slice[Callback]) Slice[Callback] { return cbs.Append(cb) })
+
 	return f
 }
 
@@ -209,6 +211,7 @@ func (f *FSM) OnExit(state State, cb Callback) *FSM {
 	entry := f.onExit.Entry(state)
 	entry.OrDefault()
 	entry.Transform(func(cbs Slice[Callback]) Slice[Callback] { return cbs.Append(cb) })
+
 	return f
 }
 
@@ -271,9 +274,11 @@ func (f *FSM) Trigger(event Event, input ...any) error {
 					err = &ErrCallback{HookType: "OnTransition", Err: fmt.Errorf("panic: %v", r)}
 				}
 			}()
+
 			if hookErr := hook(previousState, nextState, event, f.ctx); hookErr != nil {
 				err = &ErrCallback{HookType: "OnTransition", Err: hookErr}
 			}
+
 			return err
 		}(); err != nil {
 			return err
@@ -338,6 +343,7 @@ func (f *FSM) MarshalJSON() ([]byte, error) {
 		Data:    f.ctx.Data.Iter().Collect(),
 		Meta:    f.ctx.Meta.Iter().Collect(),
 	}
+
 	return json.Marshal(state)
 }
 
