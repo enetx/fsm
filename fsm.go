@@ -4,71 +4,10 @@
 package fsm
 
 import (
-	"encoding/json"
 	"fmt"
-	"sync"
 
 	. "github.com/enetx/g"
 )
-
-type (
-	// State represents a finite state in the FSM.
-	State String
-	// Event represents an event that triggers a transition.
-	Event String
-)
-
-type (
-	// Callback is a function called on entering or exiting a state.
-	Callback func(ctx *Context) error
-	// GuardFunc determines whether a transition is allowed.
-	GuardFunc func(ctx *Context) bool
-	// TransitionHook is a global callback called after a transition between states.
-	// It runs after OnExit and before OnEnter.
-	TransitionHook func(from, to State, event Event, ctx *Context) error
-)
-
-// transition is an internal struct representing a possible path between states.
-type transition struct {
-	event Event
-	to    State
-	guard GuardFunc
-}
-
-// Context holds FSM state, input, persistent and temporary data.
-// Data is for long-lived values (e.g. user ID, settings) and is serialized.
-// Meta is for ephemeral metadata (e.g. timestamps, counters) and is also serialized.
-// Input holds data specific to the current trigger event and is NOT serialized.
-// State holds the state for which a callback is being executed.
-type Context struct {
-	State State
-	Input any
-	Data  *MapSafe[String, any]
-	Meta  *MapSafe[String, any]
-}
-
-// FSM is the main state machine struct.
-type FSM struct {
-	initial      State
-	current      State
-	history      Slice[State]
-	transitions  Map[State, Slice[transition]]
-	onEnter      Map[State, Slice[Callback]]
-	onExit       Map[State, Slice[Callback]]
-	onTransition Slice[TransitionHook]
-
-	ctx *Context
-	mu  sync.RWMutex
-}
-
-// FSMState is a serializable representation of the FSM's state.
-// It uses standard map types for robust JSON handling.
-type FSMState struct {
-	Current State            `json:"current"`
-	History Slice[State]     `json:"history"`
-	Data    Map[String, any] `json:"data"`
-	Meta    Map[String, any] `json:"meta"`
-}
 
 // NewFSM creates a new FSM with the given initial state.
 func NewFSM(initial State) *FSM {
@@ -80,11 +19,7 @@ func NewFSM(initial State) *FSM {
 		onEnter:      NewMap[State, Slice[Callback]](),
 		onExit:       NewMap[State, Slice[Callback]](),
 		onTransition: NewSlice[TransitionHook](),
-		ctx: &Context{
-			State: initial,
-			Data:  NewMapSafe[String, any](),
-			Meta:  NewMapSafe[String, any](),
-		},
+		ctx:          newContext(initial),
 	}
 }
 
@@ -101,11 +36,7 @@ func (f *FSM) Clone() *FSM {
 		onEnter:      f.onEnter,
 		onExit:       f.onExit,
 		onTransition: f.onTransition,
-		ctx: &Context{
-			State: f.initial,
-			Data:  NewMapSafe[String, any](),
-			Meta:  NewMapSafe[String, any](),
-		},
+		ctx:          newContext(f.initial),
 	}
 }
 
@@ -139,13 +70,7 @@ func (f *FSM) Reset() {
 	defer f.mu.Unlock()
 
 	f.current = f.initial
-
-	f.ctx = &Context{
-		State: f.initial,
-		Data:  NewMapSafe[String, any](),
-		Meta:  NewMapSafe[String, any](),
-	}
-
+	f.ctx = newContext(f.initial)
 	f.history = Slice[State]{f.initial}
 }
 
@@ -337,51 +262,6 @@ func (f *FSM) CallEnter(state State) error {
 			}
 		}
 	}
-
-	return nil
-}
-
-// MarshalJSON implements the json.Marshaler interface.
-func (f *FSM) MarshalJSON() ([]byte, error) {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-
-	state := FSMState{
-		Current: f.current,
-		History: f.history.Clone(),
-		Data:    f.ctx.Data.Iter().Collect(),
-		Meta:    f.ctx.Meta.Iter().Collect(),
-	}
-
-	return json.Marshal(state)
-}
-
-// UnmarshalJSON implements the json.Unmarshaler interface.
-func (f *FSM) UnmarshalJSON(data []byte) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	var state FSMState
-	if err := json.Unmarshal(data, &state); err != nil {
-		return fmt.Errorf("failed to unmarshal fsm state: %w", err)
-	}
-
-	states := f.states()
-	if !states.Contains(state.Current) {
-		return &ErrUnknownState{State: state.Current}
-	}
-
-	for state := range state.History.Iter() {
-		if !states.Contains(state) {
-			return &ErrUnknownState{State: state}
-		}
-	}
-
-	f.current = state.Current
-	f.history = state.History
-	f.ctx.State = state.Current
-	f.ctx.Data = state.Data.ToMapSafe()
-	f.ctx.Meta = state.Meta.ToMapSafe()
 
 	return nil
 }

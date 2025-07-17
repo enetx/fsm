@@ -17,6 +17,7 @@ This library provides a simple yet powerful API for defining states and transiti
 -   **Global Transition Hooks**: `OnTransition` allows you to monitor and log all state changes globally.
 -   **Guarded Transitions**: Control transitions with `TransitionWhen` based on custom logic.
 -   **JSON Serialization**: Easily save and restore the FSM's state with built-in `json.Marshaler` and `json.Unmarshaler` support.
+-   **Graphviz Visualization**: Generate DOT-format graphs to visualize your FSM.
 -   **Zero Dependencies** (besides `github.com/enetx/g`).
 
 ## Installation
@@ -206,6 +207,37 @@ if err != nil {
 fmt.Println(restoredFSM.Current())
 ```
 **Note**: Serialization only saves the FSM's state (`current`, `history`, `Data`, `Meta`). It does not save the transition rules or callbacks. You must configure the FSM template before unmarshaling.
+
+### Visualization
+
+The library includes a `ToDOT()` method to generate a graph of your state machine in the [DOT language](https://graphviz.org/doc/info/lang.html). This is extremely useful for debugging, documentation, and sharing your FSM's logic with your team.
+
+You can render the output into an image using various tools:
+
+*   **Online Editors (Recommended for quick use):**
+    *   [**Graphviz Online**](https://dreampuf.github.io/GraphvizOnline/) - A simple and effective web-based viewer.
+    *   [**Edotor**](https://edotor.net/) - Another powerful online editor with different layout engines.
+    *   Simply paste the output of `ToDOT()` into one of these sites to see your diagram instantly.
+
+*   **Local Installation:**
+    *   For more advanced use or integration into build scripts, you can install [**Graphviz**](https://graphviz.org/download/) locally.
+
+**Example:**
+
+```go
+func main() {
+    fsmachine := fsm.NewFSM("Idle").
+        Transition("Idle", "start", "Running").
+        TransitionWhen("Running", "suspend", "Suspended", func(ctx *fsm.Context) bool {
+            return true
+        }).
+        Transition("Suspended", "resume", "Running").
+        Transition("Running", "finish", "Done")
+
+    // Generate the DOT string
+    fsmachine.ToDOT().Println() // Copy this output
+}
+```
 
 ## Contributing
 

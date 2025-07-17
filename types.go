@@ -1,0 +1,43 @@
+package fsm
+
+import (
+	"sync"
+
+	. "github.com/enetx/g"
+)
+
+type (
+	// State represents a finite state in the FSM.
+	State String
+	// Event represents an event that triggers a transition.
+	Event String
+
+	// Callback is a function called on entering or exiting a state.
+	Callback func(ctx *Context) error
+	// GuardFunc determines whether a transition is allowed.
+	GuardFunc func(ctx *Context) bool
+	// TransitionHook is a global callback called after a transition between states.
+	// It runs after OnExit and before OnEnter.
+	TransitionHook func(from, to State, event Event, ctx *Context) error
+
+	// transition is an internal struct representing a possible path between states.
+	transition struct {
+		event Event
+		to    State
+		guard GuardFunc
+	}
+
+	// FSM is the main state machine struct.
+	FSM struct {
+		initial      State
+		current      State
+		history      Slice[State]
+		transitions  Map[State, Slice[transition]]
+		onEnter      Map[State, Slice[Callback]]
+		onExit       Map[State, Slice[Callback]]
+		onTransition Slice[TransitionHook]
+
+		ctx *Context
+		mu  sync.RWMutex
+	}
+)
