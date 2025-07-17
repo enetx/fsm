@@ -15,7 +15,7 @@ func main() {
 	scanner := bufio.NewScanner(os.Stdin)
 
 	// Define the FSM with states, transitions, guards, and callbacks
-	fsm := NewFSM("start").
+	fsm := New("start").
 		// Transition from start to ask_name
 		Transition("start", "next", "ask_name").
 		// After name input, go to ask_age

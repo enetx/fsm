@@ -9,8 +9,8 @@ import (
 	. "github.com/enetx/g"
 )
 
-// NewFSM creates a new FSM with the given initial state.
-func NewFSM(initial State) *FSM {
+// New creates a new FSM with the given initial state.
+func New(initial State) *FSM {
 	return &FSM{
 		initial:      initial,
 		current:      initial,

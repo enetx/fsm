@@ -11,7 +11,7 @@ import (
 func main() {
 	scanner := bufio.NewScanner(os.Stdin)
 
-	fsm := NewFSM("start").
+	fsm := New("start").
 		Transition("start", "next", "ask_name").
 		Transition("ask_name", "input", "ask_age").
 		Transition("ask_age", "input", "ask_lang").

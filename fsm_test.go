@@ -46,7 +46,7 @@ func assertFalse(t *testing.T, cond bool) {
 }
 
 func TestFSM_BasicTransition(t *testing.T) {
-	testFSM := NewFSM("idle").
+	testFSM := New("idle").
 		Transition("idle", "start", "running").
 		Transition("running", "stop", "idle")
 
@@ -59,7 +59,7 @@ func TestFSM_BasicTransition(t *testing.T) {
 
 func TestFSM_Guard(t *testing.T) {
 	called := false
-	testFSM := NewFSM("ready").
+	testFSM := New("ready").
 		TransitionWhen("ready", "go", "done", func(ctx *Context) bool {
 			return ctx.Meta.Get("ok").UnwrapOr(false).(bool)
 		}).
@@ -82,7 +82,7 @@ func TestFSM_Guard(t *testing.T) {
 func TestFSM_OnEnterExit(t *testing.T) {
 	order := Slice[String]{}
 
-	testFSM := NewFSM("off").
+	testFSM := New("off").
 		Transition("off", "toggle", "on").
 		Transition("on", "toggle", "off").
 		OnExit("off", func(*Context) error {
@@ -101,7 +101,7 @@ func TestFSM_OnEnterExit(t *testing.T) {
 }
 
 func TestFSM_Reset(t *testing.T) {
-	fsm := NewFSM("a").
+	fsm := New("a").
 		Transition("a", "next", "b")
 
 	fsm.Context().Data.Set("x", 123)
@@ -119,7 +119,7 @@ func TestFSM_OnTransition(t *testing.T) {
 	var from, to State
 	var event Event
 
-	fsm := NewFSM("a").
+	fsm := New("a").
 		Transition("a", "go", "b").
 		OnTransition(func(f, t State, e Event, _ *Context) error {
 			called = true
@@ -135,7 +135,7 @@ func TestFSM_OnTransition(t *testing.T) {
 }
 
 func TestFSM_History(t *testing.T) {
-	fsm := NewFSM("x").
+	fsm := New("x").
 		Transition("x", "next", "y").
 		Transition("y", "next", "z")
 
@@ -150,7 +150,7 @@ func TestFSM_History(t *testing.T) {
 }
 
 func TestFSM_OnEnterError(t *testing.T) {
-	fsm := NewFSM("s").
+	fsm := New("s").
 		Transition("s", "go", "t").
 		OnEnter("t", func(*Context) error {
 			return fmt.Errorf("fail")
@@ -161,13 +161,13 @@ func TestFSM_OnEnterError(t *testing.T) {
 }
 
 func TestFSM_InvalidEvent(t *testing.T) {
-	fsm := NewFSM("only")
+	fsm := New("only")
 	err := fsm.Trigger("nope")
 	assertError(t, err)
 }
 
 func TestFSM_Clone(t *testing.T) {
-	template := NewFSM("a").
+	template := New("a").
 		Transition("a", "next", "b")
 
 	fsm1 := template.Clone()
@@ -185,7 +185,7 @@ func TestFSM_SetState(t *testing.T) {
 	enterCalled := false
 	exitCalled := false
 
-	fsm := NewFSM("a").
+	fsm := New("a").
 		OnEnter("b", func(*Context) error { enterCalled = true; return nil }).
 		OnExit("a", func(*Context) error { exitCalled = true; return nil })
 
@@ -199,7 +199,7 @@ func TestFSM_SetState(t *testing.T) {
 
 func TestFSM_CallEnter(t *testing.T) {
 	enterCalled := false
-	fsm := NewFSM("a").
+	fsm := New("a").
 		OnEnter("a", func(*Context) error { enterCalled = true; return nil })
 
 	assertNoError(t, fsm.CallEnter("a"))
@@ -211,7 +211,7 @@ func TestFSM_CallEnter(t *testing.T) {
 }
 
 func TestFSM_Serialization(t *testing.T) {
-	template := NewFSM("a").
+	template := New("a").
 		Transition("a", "next", "b")
 
 	fsm := template.Clone()
@@ -235,7 +235,7 @@ func TestFSM_Serialization(t *testing.T) {
 }
 
 func TestFSM_SerializationUnknownState(t *testing.T) {
-	fsm := NewFSM("a").Transition("a", "next", "b")
+	fsm := New("a").Transition("a", "next", "b")
 	invalidJSON := `{"current": "unknown_state", "history": ["a"]}`
 
 	err := json.Unmarshal([]byte(invalidJSON), fsm)
@@ -244,7 +244,7 @@ func TestFSM_SerializationUnknownState(t *testing.T) {
 }
 
 func TestFSM_PanicRecovery(t *testing.T) {
-	fsm := NewFSM("a").
+	fsm := New("a").
 		Transition("a", "go", "b").
 		OnEnter("b", func(*Context) error {
 			panic("something went wrong")
@@ -256,7 +256,7 @@ func TestFSM_PanicRecovery(t *testing.T) {
 }
 
 func TestFSM_States(t *testing.T) {
-	fsm := NewFSM("a").
+	fsm := New("a").
 		Transition("a", "to_b", "b").
 		Transition("b", "to_c", "c").
 		Transition("b", "to_a", "a")
@@ -271,7 +271,7 @@ func TestFSM_States(t *testing.T) {
 func TestFSM_TriggerInput(t *testing.T) {
 	var received any
 
-	fsm := NewFSM("x").
+	fsm := New("x").
 		Transition("x", "go", "y").
 		OnEnter("y", func(ctx *Context) error {
 			received = ctx.Input
@@ -283,7 +283,7 @@ func TestFSM_TriggerInput(t *testing.T) {
 }
 
 func TestFSM_OnExitError(t *testing.T) {
-	fsm := NewFSM("a").
+	fsm := New("a").
 		Transition("a", "go", "b").
 		OnExit("a", func(*Context) error {
 			return fmt.Errorf("exit error")
@@ -295,7 +295,7 @@ func TestFSM_OnExitError(t *testing.T) {
 }
 
 func TestFSM_OnTransitionError(t *testing.T) {
-	fsm := NewFSM("a").
+	fsm := New("a").
 		Transition("a", "go", "b").
 		OnTransition(func(_, _ State, _ Event, _ *Context) error { return fmt.Errorf("hook failed") })
 

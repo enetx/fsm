@@ -8,7 +8,7 @@ import (
 )
 
 func defFSM() *fsm.FSM {
-	return fsm.NewFSM("idle").
+	return fsm.New("idle").
 		Transition("idle", "start", "running").
 		Transition("running", "pause", "paused").
 		Transition("running", "stop", "stopped").

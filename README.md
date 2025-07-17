@@ -50,7 +50,7 @@ func main() {
 	)
 
 	// 2. Configure the FSM template
-	fsmachine := fsm.NewFSM(StateAskName).
+	fsmachine := fsm.New(StateAskName).
 		Transition(StateAskName, EventAnswer, StateAskAge).
 		Transition(StateAskAge, EventAnswer, StateDone)
 
@@ -108,7 +108,7 @@ Current state: done
 ### Creating an FSM
 
 ```go
-fsmachine := fsm.NewFSM("initial_state")
+fsmachine := fsm.New("initial_state")
 ```
 
 ### Defining Transitions
@@ -194,7 +194,7 @@ if err != nil {
 **Restoring State:**
 ```go
 // 1. Create a new FSM with the same configuration as the original.
-restoredFSM := fsm.NewFSM("initial_state").
+restoredFSM := fsm.New("initial_state").
     Transition(...) // ...add all transitions and callbacks
 
 // 2. Unmarshal the JSON data into the new instance.
@@ -226,7 +226,7 @@ You can render the output into an image using various tools:
 
 ```go
 func main() {
-    fsmachine := fsm.NewFSM("Idle").
+    fsmachine := fsm.New("Idle").
         Transition("Idle", "start", "Running").
         TransitionWhen("Running", "suspend", "Suspended", func(ctx *fsm.Context) bool {
             return true

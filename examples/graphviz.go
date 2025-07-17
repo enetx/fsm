@@ -21,7 +21,7 @@ const (
 )
 
 func main() {
-	f := fsm.NewFSM(start).
+	f := fsm.New(start).
 		Transition(start, next, name).
 		Transition(name, input, age).
 		Transition(age, input, lang).

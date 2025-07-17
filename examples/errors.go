@@ -14,7 +14,7 @@ var ErrReviewerOnVacation = errors.New("cannot review, reviewer is on vacation")
 func main() {
 	// --- Setup FSM ---
 	// We create a new FSM for a document workflow.
-	workflowFSM := fsm.NewFSM("Draft").
+	workflowFSM := fsm.New("Draft").
 		// Define valid transitions
 		Transition("Draft", "Submit", "InReview").
 		Transition("InReview", "Approve", "Approved").
@@ -51,7 +51,7 @@ func main() {
 	// but the `OnEnter("InReview", ...)` callback will not be re-defined. We'll make a new one.
 
 	// Re-create the FSM for this test case
-	panickingFSM := fsm.NewFSM("Draft").
+	panickingFSM := fsm.New("Draft").
 		Transition("Draft", "Submit", "InReview").
 		OnEnter("InReview", func(*fsm.Context) error {
 			fmt.Println("   -> Entering 'InReview'... about to panic!")
@@ -68,7 +68,7 @@ func main() {
 	fmt.Println("--- 3. Testing a callback that returns a specific error ---")
 
 	// Create a new FSM for this final test case
-	businessErrorFSM := fsm.NewFSM("Draft").
+	businessErrorFSM := fsm.New("Draft").
 		Transition("Draft", "Submit", "InReview").
 		Transition("InReview", "Reject", "Rejected").
 		OnEnter("InReview", func(*fsm.Context) error {
