@@ -52,9 +52,9 @@ type FSM struct {
 	initial      State
 	current      State
 	history      Slice[State]
-	transitions  *MapSafe[State, Slice[transition]]
-	onEnter      *MapSafe[State, Slice[Callback]]
-	onExit       *MapSafe[State, Slice[Callback]]
+	transitions  Map[State, Slice[transition]]
+	onEnter      Map[State, Slice[Callback]]
+	onExit       Map[State, Slice[Callback]]
 	onTransition Slice[TransitionHook]
 
 	ctx *Context
@@ -76,9 +76,9 @@ func NewFSM(initial State) *FSM {
 		initial:      initial,
 		current:      initial,
 		history:      Slice[State]{initial},
-		transitions:  NewMapSafe[State, Slice[transition]](),
-		onEnter:      NewMapSafe[State, Slice[Callback]](),
-		onExit:       NewMapSafe[State, Slice[Callback]](),
+		transitions:  NewMap[State, Slice[transition]](),
+		onEnter:      NewMap[State, Slice[Callback]](),
+		onExit:       NewMap[State, Slice[Callback]](),
 		onTransition: NewSlice[TransitionHook](),
 		ctx: &Context{
 			State: initial,
@@ -188,6 +188,9 @@ func (f *FSM) Transition(from State, event Event, to State) *FSM {
 
 // TransitionWhen adds a guarded transition from -> event -> to.
 func (f *FSM) TransitionWhen(from State, event Event, to State, guard GuardFunc) *FSM {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	entry := f.transitions.Entry(from)
 	entry.OrDefault()
 	entry.Transform(func(s Slice[transition]) Slice[transition] {
@@ -199,6 +202,9 @@ func (f *FSM) TransitionWhen(from State, event Event, to State, guard GuardFunc)
 
 // OnEnter registers a callback for when entering a given state.
 func (f *FSM) OnEnter(state State, cb Callback) *FSM {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	entry := f.onEnter.Entry(state)
 	entry.OrDefault()
 	entry.Transform(func(cbs Slice[Callback]) Slice[Callback] { return cbs.Append(cb) })
@@ -208,6 +214,9 @@ func (f *FSM) OnEnter(state State, cb Callback) *FSM {
 
 // OnExit registers a callback for when exiting a given state.
 func (f *FSM) OnExit(state State, cb Callback) *FSM {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	entry := f.onExit.Entry(state)
 	entry.OrDefault()
 	entry.Transform(func(cbs Slice[Callback]) Slice[Callback] { return cbs.Append(cb) })
@@ -315,12 +324,12 @@ func (f *FSM) executeCallback(cb Callback, hookType string, state State) (err er
 }
 
 // CallEnter manually invokes all OnEnter callbacks for a state without a transition.
-// Note: It does not set ctx.Input. Use ctx.Values/Meta for pre-loading data.
 func (f *FSM) CallEnter(state State) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	f.ctx.State = state
+
 	if cbs := f.onEnter.Get(state); cbs.IsSome() {
 		for cb := range cbs.Some().Iter() {
 			if err := f.executeCallback(cb, "OnEnter", state); err != nil {
