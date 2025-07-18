@@ -18,9 +18,6 @@ type FSMState struct {
 
 // MarshalJSON implements the json.Marshaler interface.
 func (f *FSM) MarshalJSON() ([]byte, error) {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-
 	state := FSMState{
 		Current: f.current,
 		History: f.history.Clone(),
@@ -33,15 +30,12 @@ func (f *FSM) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements the json.Unmarshaler interface.
 func (f *FSM) UnmarshalJSON(data []byte) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
 	var state FSMState
 	if err := json.Unmarshal(data, &state); err != nil {
 		return fmt.Errorf("failed to unmarshal fsm state: %w", err)
 	}
 
-	states := f.states()
+	states := f.States()
 	if !states.Contains(state.Current) {
 		return &ErrUnknownState{State: state.Current}
 	}

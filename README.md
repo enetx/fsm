@@ -12,7 +12,8 @@ This library provides a simple yet powerful API for defining states and transiti
 ## Features
 
 -   **Simple & Fluent API**: Define your state machine with clear, chainable methods.
--   **Concurrent-Safe**: Designed for use in multi-threaded applications. All state transitions are atomic.
+-   **Fast by Default**: The base FSM is non-blocking for maximum performance in single-threaded use cases.
+-   **Drop-in Concurrency**: Get a fully thread-safe FSM by calling a single `Sync()` method.
 -   **State Callbacks**: Execute code on entering (`OnEnter`) or exiting (`OnExit`) a state.
 -   **Global Transition Hooks**: `OnTransition` allows you to monitor and log all state changes globally.
 -   **Guarded Transitions**: Control transitions with `TransitionWhen` based on custom logic.
@@ -28,79 +29,76 @@ go get github.com/enetx/fsm
 
 ## Quick Start
 
-Here's a simple example of a user survey bot's logic:
+Here's a simple example of a traffic light state machine:
 
 ```go
 package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/enetx/fsm"
 )
 
 func main() {
-	// 1. Define the FSM states and events
+	// 1. Define states and the event
 	const (
-		StateAskName = "ask_name"
-		StateAskAge  = "ask_age"
-		StateDone    = "done"
-
-		EventAnswer = "answer"
+		StateGreen  = "Green"
+		StateYellow = "Yellow"
+		StateRed    = "Red"
+		EventTimer  = "timer_expires"
 	)
 
-	// 2. Configure the FSM template
-	fsmachine := fsm.New(StateAskName).
-		Transition(StateAskName, EventAnswer, StateAskAge).
-		Transition(StateAskAge, EventAnswer, StateDone)
+	// 2. Configure the FSM
+	lightFSM := fsm.New(StateRed).
+		Transition(StateGreen, EventTimer, StateYellow).
+		Transition(StateYellow, EventTimer, StateRed).
+		Transition(StateRed, EventTimer, StateGreen)
 
 	// 3. Define callbacks for entering states
-	fsmachine.OnEnter(StateAskName, func(ctx *fsm.Context) error {
-		fmt.Println("Bot: Hello! What is your name?")
+	lightFSM.OnEnter(StateGreen, func(ctx *fsm.Context) error {
+		fmt.Println("LIGHT: Green -> Go!")
+		return nil
+	})
+	lightFSM.OnEnter(StateYellow, func(ctx *fsm.Context) error {
+		fmt.Println("LIGHT: Yellow -> Prepare to stop")
+		return nil
+	})
+	lightFSM.OnEnter(StateRed, func(ctx *fsm.Context) error {
+		fmt.Println("LIGHT: Red -> Stop!")
 		return nil
 	})
 
-	fsmachine.OnEnter(StateAskAge, func(ctx *fsm.Context) error {
-		name := ctx.Input.(string)
-		ctx.Data.Set("name", name) // Store the name
-		fmt.Printf("Bot: Nice to meet you, %s! How old are you?\n", name)
-		return nil
-	})
+	// 4. Run the FSM loop
+	fmt.Printf("Initial state: %s\n", lightFSM.Current())
+	lightFSM.CallEnter(StateRed) // Manually trigger the first prompt
 
-	fsmachine.OnEnter(StateDone, func(ctx *fsm.Context) error {
-		name := ctx.Data.Get("name").Some()
-		age := ctx.Input.(string)
-		fmt.Printf("Bot: Got it! Your name is %s and you are %s years old.\n", name, age)
-		return nil
-	})
-
-	// 4. Run the FSM
-	fmt.Printf("Current state: %s\n", fsmachine.Current())
-	fsmachine.CallEnter(StateAskName) // Manually trigger the first prompt
-
-	fmt.Println("\nUser: Alice")
-	fsmachine.Trigger(EventAnswer, "Alice")
-	fmt.Printf("Current state: %s\n", fsmachine.Current())
-
-	fmt.Println("\nUser: 30")
-	fsmachine.Trigger(EventAnswer, "30")
-	fmt.Printf("Current state: %s\n", fsmachine.Current())
+	for range 4  {
+		time.Sleep(1 * time.Second)
+		fmt.Println("\n...timer expires...")
+		lightFSM.Trigger(EventTimer)
+	}
 }
 ```
 
 ### Output
 
 ```text
-Current state: ask_name
-Bot: Hello! What is your name?
+Initial state: Red
+LIGHT: Red -> Stop!
 
-User: Alice
-Bot: Nice to meet you, Alice! How old are you?
-Current state: ask_age
+...timer expires...
+LIGHT: Green -> Go!
 
-User: 30
-Bot: Got it! Your name is Alice and you are 30 years old.
-Current state: done
+...timer expires...
+LIGHT: Yellow -> Prepare to stop
+
+...timer expires...
+LIGHT: Red -> Stop!
+
+...timer expires...
+LIGHT: Green -> Go!
 ```
 
 ## API Overview
@@ -108,7 +106,11 @@ Current state: done
 ### Creating an FSM
 
 ```go
+// Create a new FSM instance (not thread-safe)
 fsmachine := fsm.New("initial_state")
+
+// Get a thread-safe wrapper for concurrent use
+safeFSM := fsmachine.Sync()
 ```
 
 ### Defining Transitions
@@ -167,15 +169,43 @@ Any error returned from a callback will halt the transition and be returned by `
 The `Context` is passed to every callback and guard. It's the primary way to manage data associated with an FSM instance.
 
 -   `ctx.Input`: Holds the data passed with the current `Trigger` call. It's ephemeral and lasts for one transition only.
--   `ctx.Data`: A concurrent-safe map for persistent data (e.g., user details).
--   `ctx.Meta`: A concurrent-safe map for ephemeral metadata (e.g., temporary counters).
+-   `ctx.Data`: A concurrent-safe map (`g.MapSafe`) for persistent data that is serialized with the FSM (e.g., user details).
+-   `ctx.Meta`: A concurrent-safe map (`g.MapSafe`) for ephemeral metadata that is also serialized (e.g., temporary counters).
 
 ### Concurrency
 
-This library is designed to be safe for concurrent use. All methods that modify the FSM's state are protected by a mutex, ensuring that transitions are atomic.
+The library is designed with performance and safety in mind, offering two distinct operating modes:
 
--   Configuration methods like `TransitionWhen`, `OnEnter`, and `OnExit` are safe to call concurrently as they operate on a thread-safe map.
--   State-changing methods like `Trigger`, `Reset`, and `SetState` acquire a lock to ensure atomicity.
+1.  **`fsm.FSM` (Default)**: The base state machine is **not** thread-safe. It is optimized for performance in single-threaded scenarios by avoiding the overhead of mutexes.
+
+2.  **`fsm.SyncFSM` (Synchronized)**: This is a thread-safe wrapper around the base `FSM`. It protects all operations (like `Trigger`, `Current`, `Reset`) with a mutex, ensuring that all transitions are atomic and safe to use across multiple goroutines.
+
+You should complete all configuration (`Transition`, `OnEnter`, etc.) on the base `FSM` before using it. The configuration process itself is **not** thread-safe.
+
+#### Activating Thread-Safety
+
+To get a thread-safe instance, simply call the `Sync()` method after you have configured your FSM:
+
+```go
+// 1. Configure the non-thread-safe FSM template
+fsmTemplate := fsm.New("idle").
+    Transition("idle", "start", "running").
+    Transition("running", "stop", "stopped")
+
+// 2. Get a thread-safe, synchronized instance
+safeFSM := fsmTemplate.Sync()
+
+// 3. Now you can safely use safeFSM across multiple goroutines
+go func() {
+    err := safeFSM.Trigger("start")
+    // ...
+}()
+
+go func() {
+    currentState := safeFSM.Current()
+    // ...
+}()
+```
 
 ### Serialization
 
@@ -206,7 +236,7 @@ if err != nil {
 // `restoredFSM` is now in the same state as the original was.
 fmt.Println(restoredFSM.Current())
 ```
-**Note**: Serialization only saves the FSM's state (`current`, `history`, `Data`, `Meta`). It does not save the transition rules or callbacks. You must configure the FSM template before unmarshaling.
+**Note**: Serialization only saves the FSM's state (`current`, `history`, `Data`, `Meta`). It does not save the transition rules or callbacks. You must configure the FSM template before unmarshaling. If you need a thread-safe FSM after restoring, call `.Sync()` *after* `json.Unmarshal`.
 
 ### Visualization
 

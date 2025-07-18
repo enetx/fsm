@@ -8,7 +8,7 @@ import (
 	. "github.com/enetx/g"
 )
 
-func defineFSM() *fsm.FSM {
+func defineFSM() fsm.StateMachine {
 	return fsm.New("idle").
 		Transition("idle", "start", "running").
 		Transition("running", "pause", "paused").
@@ -17,7 +17,7 @@ func defineFSM() *fsm.FSM {
 		OnEnter("running", func(*fsm.Context) error {
 			fmt.Println("State machine is now running.")
 			return nil
-		})
+		}).Concurrent()
 }
 
 func main() {

@@ -38,6 +38,14 @@ type (
 		onTransition Slice[TransitionHook]
 
 		ctx *Context
+	}
+
+	// SyncFSM is a thread-safe wrapper around an FSM.
+	// It protects all state-mutating and state-reading operations with a sync.RWMutex,
+	// making it safe for use across multiple goroutines.
+	// All methods on SyncFSM are the thread-safe counterparts to the methods on the base FSM.
+	SyncFSM struct {
+		fsm *FSM
 		mu  sync.RWMutex
 	}
 )

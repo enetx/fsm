@@ -1,6 +1,7 @@
 // Package fsm provides a generic finite state machine (FSM) implementation
 // with support for transitions, guards, and enter/exit callbacks. It is built
 // with types and utilities from the github.com/enetx/g library.
+// The base FSM is NOT concurrent-safe. For concurrent use, wrap it using the .Concurrent() method.
 package fsm
 
 import (
@@ -8,6 +9,9 @@ import (
 
 	. "github.com/enetx/g"
 )
+
+// Interface compliance check.
+var _ StateMachine = (*FSM)(nil)
 
 // New creates a new FSM with the given initial state.
 func New(initial State) *FSM {
@@ -25,9 +29,6 @@ func New(initial State) *FSM {
 
 // Clone creates a new FSM instance with the same configuration but a fresh state.
 func (f *FSM) Clone() *FSM {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-
 	return &FSM{
 		initial:      f.initial,
 		current:      f.initial,
@@ -40,51 +41,37 @@ func (f *FSM) Clone() *FSM {
 	}
 }
 
-// Context returns the FSM's context for managing data.
-func (f *FSM) Context() *Context {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
+// Sync wraps the FSM in a concurrent-safe shell.
+func (f *FSM) Sync() *SyncFSM { return &SyncFSM{fsm: f} }
 
-	return f.ctx
-}
+// Context returns the FSM's context for managing data.
+func (f *FSM) Context() *Context { return f.ctx }
 
 // Current returns the FSM's current state.
-func (f *FSM) Current() State {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-
-	return f.current
-}
+func (f *FSM) Current() State { return f.current }
 
 // History returns a copy of the list of previously visited states.
-func (f *FSM) History() Slice[State] {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-
-	return f.history.Clone()
-}
+func (f *FSM) History() Slice[State] { return f.history.Clone() }
 
 // Reset resets the FSM to its initial state and clears all context data.
 func (f *FSM) Reset() {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
 	f.current = f.initial
 	f.ctx = newContext(f.initial)
 	f.history = Slice[State]{f.initial}
 }
 
-// SetState sets the current state manually, without triggering any callbacks.
+// SetState manually sets the current state, without triggering any callbacks or guards.
+// WARNING: This is a low-level method that bypasses all FSM logic (OnExit, OnEnter callbacks,
+// transition hooks, and guards). It does not update the state history.
+// It should only be used for specific scenarios like restoring the FSM from storage
+// or for manual administrative intervention. For all standard operations, use Trigger.
 func (f *FSM) SetState(s State) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
 	f.current = s
 	f.ctx.State = s
 }
 
-// states is the internal, non-locking implementation for retrieving defined states.
-func (f *FSM) states() Slice[State] {
+// States returns a slice of all unique states defined in the FSM's transitions.
+func (f *FSM) States() Slice[State] {
 	stateSet := NewSet[State]()
 	stateSet.Insert(f.initial)
 
@@ -98,14 +85,6 @@ func (f *FSM) states() Slice[State] {
 	return stateSet.ToSlice()
 }
 
-// States returns a slice of all unique states defined in the FSM's transitions.
-func (f *FSM) States() Slice[State] {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-
-	return f.states()
-}
-
 // Transition adds a basic transition (without a guard) from -> event -> to.
 func (f *FSM) Transition(from State, event Event, to State) *FSM {
 	return f.TransitionWhen(from, event, to, nil)
@@ -113,9 +92,6 @@ func (f *FSM) Transition(from State, event Event, to State) *FSM {
 
 // TransitionWhen adds a guarded transition from -> event -> to.
 func (f *FSM) TransitionWhen(from State, event Event, to State, guard GuardFunc) *FSM {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
 	entry := f.transitions.Entry(from)
 	entry.OrDefault()
 	entry.Transform(func(s Slice[transition]) Slice[transition] {
@@ -127,9 +103,6 @@ func (f *FSM) TransitionWhen(from State, event Event, to State, guard GuardFunc)
 
 // OnEnter registers a callback for when entering a given state.
 func (f *FSM) OnEnter(state State, cb Callback) *FSM {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
 	entry := f.onEnter.Entry(state)
 	entry.OrDefault()
 	entry.Transform(func(cbs Slice[Callback]) Slice[Callback] { return cbs.Append(cb) })
@@ -139,9 +112,6 @@ func (f *FSM) OnEnter(state State, cb Callback) *FSM {
 
 // OnExit registers a callback for when exiting a given state.
 func (f *FSM) OnExit(state State, cb Callback) *FSM {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
 	entry := f.onExit.Entry(state)
 	entry.OrDefault()
 	entry.Transform(func(cbs Slice[Callback]) Slice[Callback] { return cbs.Append(cb) })
@@ -151,9 +121,6 @@ func (f *FSM) OnExit(state State, cb Callback) *FSM {
 
 // OnTransition registers a global transition hook.
 func (f *FSM) OnTransition(hook TransitionHook) *FSM {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
 	f.onTransition.Push(hook)
 	return f
 }
@@ -162,9 +129,6 @@ func (f *FSM) OnTransition(hook TransitionHook) *FSM {
 // It accepts an optional single 'input' argument to pass data to guards and callbacks.
 // This input is only valid for the duration of this specific trigger cycle.
 func (f *FSM) Trigger(event Event, input ...any) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
 	if len(input) > 0 {
 		f.ctx.Input = input[0]
 	} else {
@@ -183,6 +147,10 @@ func (f *FSM) Trigger(event Event, input ...any) error {
 
 	if matched.Empty() {
 		return &ErrInvalidTransition{From: f.current, Event: event}
+	}
+
+	if matched.Len().Gt(1) {
+		return &ErrAmbiguousTransition{From: f.current, Event: event}
 	}
 
 	t := matched[0]
@@ -250,9 +218,6 @@ func (f *FSM) executeCallback(cb Callback, hookType string, state State) (err er
 
 // CallEnter manually invokes all OnEnter callbacks for a state without a transition.
 func (f *FSM) CallEnter(state State) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
 	f.ctx.State = state
 
 	if cbs := f.onEnter.Get(state); cbs.IsSome() {

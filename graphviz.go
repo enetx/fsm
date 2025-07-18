@@ -5,10 +5,8 @@ import (
 	"github.com/enetx/g/cmp"
 )
 
+// ToDOT generates a DOT language string representation of the FSM for visualization.
 func (f *FSM) ToDOT() String {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-
 	b := NewBuilder()
 
 	b.WriteString("digraph FSM {\n")
@@ -38,7 +36,7 @@ func (f *FSM) ToDOT() String {
 		}
 	}
 
-	states := f.states()
+	states := f.States()
 	states.SortBy(cmp.Cmp)
 
 	outgoing := NewSet[State]()
