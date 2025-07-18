@@ -1,7 +1,7 @@
 // Package fsm provides a generic finite state machine (FSM) implementation
 // with support for transitions, guards, and enter/exit callbacks. It is built
 // with types and utilities from the github.com/enetx/g library.
-// The base FSM is NOT concurrent-safe. For concurrent use, wrap it using the .Concurrent() method.
+// The base FSM is NOT concurrent-safe. For concurrent use, wrap it using the .Sync() method.
 package fsm
 
 import (

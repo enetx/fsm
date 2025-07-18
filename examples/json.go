@@ -17,7 +17,7 @@ func defineFSM() fsm.StateMachine {
 		OnEnter("running", func(*fsm.Context) error {
 			fmt.Println("State machine is now running.")
 			return nil
-		}).Concurrent()
+		}).Sync()
 }
 
 func main() {
