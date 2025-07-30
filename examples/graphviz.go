@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/enetx/fsm"
-	. "github.com/enetx/g"
+	"github.com/enetx/g"
 )
 
 const (
@@ -29,9 +29,9 @@ func main() {
 		Transition(lang, input, confirm).
 		TransitionWhen(confirm, ok, done, func(*fsm.Context) bool { return true }).
 		TransitionWhen(confirm, ok, name, func(*fsm.Context) bool { return false }).
-		OnEnter(name, func(*fsm.Context) error { Println("Entered ask_name"); return nil }).
-		OnExit(name, func(*fsm.Context) error { Println("Leaving ask_name"); return nil }).
-		OnEnter(done, func(*fsm.Context) error { Println("Process done"); return nil })
+		OnEnter(name, func(*fsm.Context) error { g.Println("Entered ask_name"); return nil }).
+		OnExit(name, func(*fsm.Context) error { g.Println("Leaving ask_name"); return nil }).
+		OnEnter(done, func(*fsm.Context) error { g.Println("Process done"); return nil })
 
 	// https://edotor.net/
 	f.ToDOT().Println()

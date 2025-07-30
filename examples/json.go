@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/enetx/fsm"
-	. "github.com/enetx/g"
+	"github.com/enetx/g"
 )
 
 func defineFSM() fsm.StateMachine {
@@ -33,17 +33,17 @@ func main() {
 		panic(err)
 	}
 
-	Println("Original FSM state: {}", myFSM.Current())
-	Println("Original FSM history: {}", myFSM.History())
-	Println("--------------------")
+	g.Println("Original FSM state: {}", myFSM.Current())
+	g.Println("Original FSM history: {}", myFSM.History())
+	g.Println("--------------------")
 
 	jsonData, err := json.MarshalIndent(myFSM, "", "  ")
 	if err != nil {
 		panic(err)
 	}
 
-	Println("Serialized FSM:\n{}", String(jsonData))
-	Println("--------------------")
+	g.Println("Serialized FSM:\n{}", g.String(jsonData))
+	g.Println("--------------------")
 
 	restoredFSM := defineFSM()
 
@@ -51,11 +51,11 @@ func main() {
 		panic(err)
 	}
 
-	Println("Restored FSM state: {}", restoredFSM.Current())
-	Println("Restored FSM history: {}", restoredFSM.History())
+	g.Println("Restored FSM state: {}", restoredFSM.Current())
+	g.Println("Restored FSM history: {}", restoredFSM.History())
 
 	pid := restoredFSM.Context().Data.Get("processID")
-	Println("Restored context data 'processID': {}", pid.Some())
+	g.Println("Restored context data 'processID': {}", pid.Some())
 
 	fmt.Println("--------------------")
 	fmt.Println("Resuming restored FSM...")
@@ -64,5 +64,5 @@ func main() {
 		panic(err)
 	}
 
-	Println("New state after resume: {}", restoredFSM.Current())
+	g.Println("New state after resume: {}", restoredFSM.Current())
 }

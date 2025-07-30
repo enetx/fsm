@@ -1,6 +1,6 @@
 package fsm
 
-import . "github.com/enetx/g"
+import "github.com/enetx/g"
 
 // Interface compliance check.
 var _ StateMachine = (*SyncFSM)(nil)
@@ -54,7 +54,7 @@ func (sf *SyncFSM) Reset() {
 
 // History is the thread-safe version of FSM.History.
 // It returns a copy of the state transition history.
-func (sf *SyncFSM) History() Slice[State] {
+func (sf *SyncFSM) History() g.Slice[State] {
 	sf.mu.RLock()
 	defer sf.mu.RUnlock()
 
@@ -63,7 +63,7 @@ func (sf *SyncFSM) History() Slice[State] {
 
 // States is the thread-safe version of FSM.States.
 // It returns a slice of all unique states defined in the FSM.
-func (sf *SyncFSM) States() Slice[State] {
+func (sf *SyncFSM) States() g.Slice[State] {
 	sf.mu.RLock()
 	defer sf.mu.RUnlock()
 
@@ -81,7 +81,7 @@ func (sf *SyncFSM) CallEnter(state State) error {
 
 // ToDOT is the thread-safe version of FSM.ToDOT.
 // It generates a DOT language string representation of the FSM for visualization.
-func (sf *SyncFSM) ToDOT() String {
+func (sf *SyncFSM) ToDOT() g.String {
 	sf.mu.RLock()
 	defer sf.mu.RUnlock()
 

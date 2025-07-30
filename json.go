@@ -4,16 +4,16 @@ import (
 	"encoding/json"
 	"fmt"
 
-	. "github.com/enetx/g"
+	"github.com/enetx/g"
 )
 
 // FSMState is a serializable representation of the FSM's state.
 // It uses standard map types for robust JSON handling.
 type FSMState struct {
-	Current State            `json:"current"`
-	History Slice[State]     `json:"history"`
-	Data    Map[String, any] `json:"data"`
-	Meta    Map[String, any] `json:"meta"`
+	Current State                `json:"current"`
+	History g.Slice[State]       `json:"history"`
+	Data    g.Map[g.String, any] `json:"data"`
+	Meta    g.Map[g.String, any] `json:"meta"`
 }
 
 // MarshalJSON implements the json.Marshaler interface.

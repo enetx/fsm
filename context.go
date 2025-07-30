@@ -1,6 +1,6 @@
 package fsm
 
-import . "github.com/enetx/g"
+import "github.com/enetx/g"
 
 // Context holds FSM state, input, persistent and temporary data.
 // Data is for long-lived values (e.g. user ID, settings) and is serialized.
@@ -10,14 +10,14 @@ import . "github.com/enetx/g"
 type Context struct {
 	State State
 	Input any
-	Data  *MapSafe[String, any]
-	Meta  *MapSafe[String, any]
+	Data  *g.MapSafe[g.String, any]
+	Meta  *g.MapSafe[g.String, any]
 }
 
 func newContext(initial State) *Context {
 	return &Context{
 		State: initial,
-		Data:  NewMapSafe[String, any](),
-		Meta:  NewMapSafe[String, any](),
+		Data:  g.NewMapSafe[g.String, any](),
+		Meta:  g.NewMapSafe[g.String, any](),
 	}
 }

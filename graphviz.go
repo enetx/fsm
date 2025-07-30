@@ -1,13 +1,13 @@
 package fsm
 
 import (
-	. "github.com/enetx/g"
+	"github.com/enetx/g"
 	"github.com/enetx/g/cmp"
 )
 
 // ToDOT generates a DOT language string representation of the FSM for visualization.
-func (f *FSM) ToDOT() String {
-	b := NewBuilder()
+func (f *FSM) ToDOT() g.String {
+	b := g.NewBuilder()
 
 	b.WriteString("digraph FSM {\n")
 	b.WriteString("  rankdir=LR;\n")
@@ -17,36 +17,36 @@ func (f *FSM) ToDOT() String {
 	b.WriteString("  edge [fontname=\"Helvetica\", fontsize=10];\n\n")
 
 	b.WriteString("  __start [shape=point, style=invis];\n")
-	b.WriteString(Format("  __start -> \"{}\" [label=\" initial\"];\n\n", f.initial))
+	b.WriteString(g.Format("  __start -> \"{}\" [label=\" initial\"];\n\n", f.initial))
 
-	grouped := NewMap[Pair[State, State], Slice[String]]()
+	grouped := g.NewMap[g.Pair[State, State], g.Slice[g.String]]()
 
 	for from, transitions := range f.transitions.Iter() {
 		for transition := range transitions.Iter() {
-			key := Pair[State, State]{Key: from, Value: transition.to}
+			key := g.Pair[State, State]{Key: from, Value: transition.to}
 
-			label := String(transition.event)
+			label := g.String(transition.event)
 			if transition.guard != nil {
 				label += " (guarded)"
 			}
 
 			entry := grouped.Entry(key)
 			entry.OrDefault()
-			entry.Transform(func(s Slice[String]) Slice[String] { return s.Append(label) })
+			entry.Transform(func(s g.Slice[g.String]) g.Slice[g.String] { return s.Append(label) })
 		}
 	}
 
 	states := f.States()
 	states.SortBy(cmp.Cmp)
 
-	outgoing := NewSet[State]()
+	outgoing := g.NewSet[State]()
 	for p := range grouped.Keys().Iter() {
 		outgoing.Insert(p.Key)
 	}
 
 	for state := range states.Iter() {
-		var attrs Slice[String]
-		attrs.Push(Format("label=\"{}\"", state))
+		var attrs g.Slice[g.String]
+		attrs.Push(g.Format("label=\"{}\"", state))
 
 		switch {
 		case state == f.current:
@@ -55,7 +55,7 @@ func (f *FSM) ToDOT() String {
 			attrs.Push("fillcolor=\"#d3d3d3\"", "shape=doublecircle")
 		}
 
-		var tooltips Slice[String]
+		var tooltips g.Slice[g.String]
 
 		if f.onEnter.Contains(state) {
 			tooltips.Push("OnEnter")
@@ -66,10 +66,10 @@ func (f *FSM) ToDOT() String {
 		}
 
 		if tooltips.NotEmpty() {
-			attrs.Push(Format("tooltip=\"{}\"", tooltips.Join("\\n")))
+			attrs.Push(g.Format("tooltip=\"{}\"", tooltips.Join("\\n")))
 		}
 
-		b.WriteString(Format("  \"{}\" [{}];\n", state, attrs.Join(", ")))
+		b.WriteString(g.Format("  \"{}\" [{}];\n", state, attrs.Join(", ")))
 	}
 
 	b.WriteByte('\n')
@@ -77,16 +77,16 @@ func (f *FSM) ToDOT() String {
 	for pair, labels := range grouped.Iter() {
 		from, to := pair.Key, pair.Value
 
-		var edge Slice[String]
+		var edge g.Slice[g.String]
 		label := labels.Join("\\n")
 
-		edge.Push(Format("label=\" {} \"", label))
+		edge.Push(g.Format("label=\" {} \"", label))
 
 		if label.Contains("(guarded)") {
 			edge.Push("style=dashed", "color=red", "arrowhead=odiamond")
 		}
 
-		b.WriteString(Format("  \"{}\" -> \"{}\" [{}];\n", from, to, edge.Join(", ")))
+		b.WriteString(g.Format("  \"{}\" -> \"{}\" [{}];\n", from, to, edge.Join(", ")))
 	}
 
 	b.WriteString("\n  subgraph cluster_legend {\n")

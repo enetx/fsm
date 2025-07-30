@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/enetx/fsm"
-	. "github.com/enetx/g"
+	"github.com/enetx/g"
 )
 
 // timerCancelFuncs is a thread-safe map to store cancellation functions for active timers.
@@ -13,7 +13,7 @@ import (
 // cancel it if the FSM leaves the 'waiting' state prematurely. A global map provides a
 // simple approach for this example; in a larger application, this might be managed
 // by a dedicated service.
-var timerCancelFuncs = NewMapSafe[fsm.StateMachine, context.CancelFunc]()
+var timerCancelFuncs = g.NewMapSafe[fsm.StateMachine, context.CancelFunc]()
 
 // Defining states as constants is a best practice. It prevents typos and makes the
 // FSM configuration easier to read and maintain.
@@ -50,7 +50,7 @@ func main() {
 	// 3. Set up the callbacks that manage the timer's lifecycle.
 	// This OnEnter callback is fired whenever the FSM enters the 'Waiting' state.
 	fsmTemplate.OnEnter(StateWaiting, func(*fsm.Context) error {
-		Println(">> Entered Waiting state. You have 3 seconds to confirm...")
+		g.Println(">> Entered Waiting state. You have 3 seconds to confirm...")
 
 		// Use context.WithTimeout to create a context that automatically cancels after a
 		// specified duration.
@@ -69,18 +69,18 @@ func main() {
 			switch ctx.Err() {
 			case context.DeadlineExceeded:
 				// The 3-second timeout was reached.
-				Println(">> Context deadline exceeded. Firing timeout event...")
+				g.Println(">> Context deadline exceeded. Firing timeout event...")
 
 				// Trigger the timeout event to move the FSM to the TimedOut state.
 				if err := safeFSM.Trigger(EventTimeout); err != nil {
 					// This error is expected if the FSM has already left the Waiting state
 					// (e.g., via cancellation). We log it for clarity.
-					Println("Error triggering timeout: {} (This is ok if we already left the state)", err)
+					g.Println("Error triggering timeout: {} (This is ok if we already left the state)", err)
 				}
 			case context.Canceled:
 				// This means cancel() was called from our OnExit callback.
 				// The timer was successfully aborted, so we do nothing.
-				Println(">> Context was canceled externally.")
+				g.Println(">> Context was canceled externally.")
 			}
 		}()
 
@@ -92,7 +92,7 @@ func main() {
 	// clean up by calling the timer's `cancel` function. This prevents an "orphaned"
 	// timer from firing later and causing unexpected side effects.
 	fsmTemplate.OnExit(StateWaiting, func(*fsm.Context) error {
-		Println("<< Exiting Waiting state. Cleaning up timer...")
+		g.Println("<< Exiting Waiting state. Cleaning up timer...")
 
 		// This pattern is both concise and safe for cleaning up the timer.
 		//
@@ -116,21 +116,21 @@ func main() {
 
 	// --- DEMONSTRATION ---
 
-	Println("--- Scenario 1: Let the timer run out ---")
+	g.Println("--- Scenario 1: Let the timer run out ---")
 	safeFSM.Trigger(EventRequest)
 	time.Sleep(4 * time.Second) // Wait for more than the 3-second timeout.
-	Println("Final state: {.Current}\n", safeFSM)
+	g.Println("Final state: {.Current}\n", safeFSM)
 
-	Println("--- Scenario 2: User cancels before the timeout ---")
+	g.Println("--- Scenario 2: User cancels before the timeout ---")
 	safeFSM.Reset()             // Reset the FSM for the second scenario.
 	safeFSM.SetState(StateIdle) // Ensure it's back to the beginning.
 
 	safeFSM.Trigger(EventRequest)
 	time.Sleep(1 * time.Second) // Wait for a short period.
-	Println(">> User clicks 'cancel'!")
+	g.Println(">> User clicks 'cancel'!")
 	safeFSM.Trigger(EventCancel) // Cancel the operation before the timer fires.
 
 	// Wait long enough to prove the orphaned timer didn't fire after being canceled.
 	time.Sleep(3 * time.Second)
-	Println("Final state: {.Current}", safeFSM)
+	g.Println("Final state: {.Current}", safeFSM)
 }

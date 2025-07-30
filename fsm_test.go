@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	. "github.com/enetx/fsm"
-	. "github.com/enetx/g"
+	"github.com/enetx/g"
 )
 
 func assertEqual[T comparable](t *testing.T, got, want T) {
@@ -80,7 +80,7 @@ func TestFSM_Guard(t *testing.T) {
 }
 
 func TestFSM_OnEnterExit(t *testing.T) {
-	order := Slice[String]{}
+	order := g.Slice[g.String]{}
 
 	testFSM := New("off").
 		Transition("off", "toggle", "on").
@@ -95,7 +95,7 @@ func TestFSM_OnEnterExit(t *testing.T) {
 		})
 
 	assertNoError(t, testFSM.Trigger("toggle"))
-	if !order.Eq(SliceOf[String]("exit_off", "enter_on")) {
+	if !order.Eq(g.SliceOf[g.String]("exit_off", "enter_on")) {
 		t.Fatalf("expected order [exit_off enter_on], got %v", order)
 	}
 }
@@ -262,10 +262,10 @@ func TestFSM_States(t *testing.T) {
 		Transition("b", "to_a", "a")
 
 	states := fsm.States()
-	expected := SetOf[State]("a", "b", "c")
+	expected := g.SetOf[State]("a", "b", "c")
 
-	assertEqual(t, SetOf(states...).Len(), expected.Len())
-	assertTrue(t, SetOf(states...).Eq(expected))
+	assertEqual(t, g.SetOf(states...).Len(), expected.Len())
+	assertTrue(t, g.SetOf(states...).Eq(expected))
 }
 
 func TestFSM_TriggerInput(t *testing.T) {

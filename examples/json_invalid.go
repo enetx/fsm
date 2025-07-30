@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/enetx/fsm"
-	. "github.com/enetx/g"
+	"github.com/enetx/g"
 )
 
 func defFSM() *fsm.FSM {
@@ -16,7 +16,7 @@ func defFSM() *fsm.FSM {
 }
 
 func main() {
-	Println("--- Scenario 1: Successful Restore ---")
+	g.Println("--- Scenario 1: Successful Restore ---")
 
 	validJSON := []byte(`{
 		"current": "paused",
@@ -29,16 +29,16 @@ func main() {
 
 	err := json.Unmarshal(validJSON, fsm1)
 	if err != nil {
-		Println("Error restoring FSM: {}", err)
+		g.Println("Error restoring FSM: {}", err)
 	} else {
-		Println("Successfully restored FSM to state: {}", fsm1.Current())
+		g.Println("Successfully restored FSM to state: {}", fsm1.Current())
 		pid := fsm1.Context().Data.Get("processID")
-		Println("Restored context data 'processID': {}", pid.Some())
+		g.Println("Restored context data 'processID': {}", pid.Some())
 	}
 
-	Println("\n----------------------------------------\n")
+	g.Println("\n----------------------------------------\n")
 
-	Println("--- Scenario 2: Restore with Unknown State ---")
+	g.Println("--- Scenario 2: Restore with Unknown State ---")
 
 	invalidJSON := []byte(`{
 		"current": "crashed",
@@ -51,9 +51,9 @@ func main() {
 
 	err = json.Unmarshal(invalidJSON, fsm2)
 	if err != nil {
-		Println("Error restoring FSM: {}", err)
-		Println("FSM remains in initial state: {}", fsm2.Current())
+		g.Println("Error restoring FSM: {}", err)
+		g.Println("FSM remains in initial state: {}", fsm2.Current())
 	} else {
-		Println("FSM restored unexpectedly.")
+		g.Println("FSM restored unexpectedly.")
 	}
 }

@@ -3,14 +3,14 @@ package fsm
 import (
 	"sync"
 
-	. "github.com/enetx/g"
+	"github.com/enetx/g"
 )
 
 type (
 	// State represents a finite state in the FSM.
-	State String
+	State g.String
 	// Event represents an event that triggers a transition.
-	Event String
+	Event g.String
 
 	// Callback is a function called on entering or exiting a state.
 	Callback func(ctx *Context) error
@@ -31,11 +31,11 @@ type (
 	FSM struct {
 		initial      State
 		current      State
-		history      Slice[State]
-		transitions  Map[State, Slice[transition]]
-		onEnter      Map[State, Slice[Callback]]
-		onExit       Map[State, Slice[Callback]]
-		onTransition Slice[TransitionHook]
+		history      g.Slice[State]
+		transitions  g.Map[State, g.Slice[transition]]
+		onEnter      g.Map[State, g.Slice[Callback]]
+		onExit       g.Map[State, g.Slice[Callback]]
+		onTransition g.Slice[TransitionHook]
 
 		ctx *Context
 	}

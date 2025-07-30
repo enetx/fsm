@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/enetx/fsm"
-	. "github.com/enetx/g"
+	"github.com/enetx/g"
 )
 
 // --- Step 1: Define the FSM's Vocabulary (States and Events) ---
@@ -35,7 +35,7 @@ const (
 // We use the `g.Int` type for HP to seamlessly integrate with the g library's utility methods.
 type Character struct {
 	Name string
-	HP   Int
+	HP   g.Int
 }
 
 // --- Step 3: Define the NPC's "Intelligence" (Guard Functions) ---
@@ -47,13 +47,13 @@ type Character struct {
 func isBadlyWounded(ctx *fsm.Context) bool {
 	// We retrieve the HP from the context. `UnwrapOrDefault` from the `g` library is used
 	// for safety, providing a zero value if the key doesn't exist.
-	npcHP := ctx.Data.Get("npc_hp").UnwrapOrDefault().(Int)
+	npcHP := ctx.Data.Get("npc_hp").UnwrapOrDefault().(g.Int)
 	return npcHP > 20 && npcHP <= 50
 }
 
 // isNearDeath checks if the NPC is about to be defeated, triggering a last-ditch enraged state.
 func isNearDeath(ctx *fsm.Context) bool {
-	npcHP := ctx.Data.Get("npc_hp").UnwrapOrDefault().(Int)
+	npcHP := ctx.Data.Get("npc_hp").UnwrapOrDefault().(g.Int)
 	return npcHP > 0 && npcHP <= 20
 }
 
@@ -92,19 +92,19 @@ func main() {
 		// OnEnter callbacks are used for "side effects" — actions that happen when a new state
 		// is entered. Here, we use them to print descriptive text, making the battle feel more alive.
 		OnEnter(StateAttacking, func(*fsm.Context) error {
-			Println("-> The Orc growls and prepares to attack!")
+			g.Println("-> The Orc growls and prepares to attack!")
 			return nil
 		}).
 		OnEnter(StateDefending, func(*fsm.Context) error {
-			Println("-> The Orc raises its shield, trying to recover.")
+			g.Println("-> The Orc raises its shield, trying to recover.")
 			return nil
 		}).
 		OnEnter(StateEnraged, func(*fsm.Context) error {
-			Println("-> Wounded and cornered, the Orc flies into a rage!")
+			g.Println("-> Wounded and cornered, the Orc flies into a rage!")
 			return nil
 		}).
 		OnEnter(StateDefeated, func(*fsm.Context) error {
-			Println("-> The Orc collapses, defeated.")
+			g.Println("-> The Orc collapses, defeated.")
 			return nil
 		})
 
@@ -117,24 +117,24 @@ func main() {
 	npcBrain.Context().Data.Set("player_hp", player.HP)
 	npcBrain.Context().Data.Set("npc_hp", npc.HP)
 
-	Println("A wild {} appears!", npc.Name)
+	g.Println("A wild {} appears!", npc.Name)
 	npcBrain.Trigger(EventEngage) // This trigger officially starts the fight.
 
 	// --- Step 7: The Main Game Loop ---
 	turn := 1
 
 	for player.HP > 0 && npc.HP > 0 {
-		Println("\n--- Turn {} ---", turn)
-		Println("Your HP: {}, {}'s HP: {}", player.HP, npc.Name, npc.HP)
-		Println("Your move: (1) Attack, (2) Defend")
+		g.Println("\n--- Turn {} ---", turn)
+		g.Println("Your HP: {}, {}'s HP: {}", player.HP, npc.Name, npc.HP)
+		g.Println("Your move: (1) Attack, (2) Defend")
 
 		// --- Player's Turn ---
 		var choice string
 		fmt.Scanln(&choice)
 
 		if choice == "1" { // The player attacks the NPC.
-			damage := Int(5).RandomRange(20)
-			Println("You strike the {} for {} damage!", npc.Name, damage)
+			damage := g.Int(5).RandomRange(20)
+			g.Println("You strike the {} for {} damage!", npc.Name, damage)
 			npc.HP -= damage
 			npcBrain.Context().Data.Set("npc_hp", npc.HP) // Crucially, we update the HP in the FSM context.
 
@@ -147,8 +147,8 @@ func main() {
 				npcBrain.Trigger(EventTakeDamage)
 			}
 		} else { // The player defends.
-			heal := Int(5).RandomRange(15)
-			Println("You brace yourself and recover {} HP.", heal)
+			heal := g.Int(5).RandomRange(15)
+			g.Println("You brace yourself and recover {} HP.", heal)
 			player.HP += heal
 		}
 
@@ -159,17 +159,17 @@ func main() {
 
 			switch npcBrain.Current() {
 			case StateAttacking:
-				damage := Int(5).RandomRange(15)
-				Println("The {} retaliates, dealing {} damage!", npc.Name, damage)
+				damage := g.Int(5).RandomRange(15)
+				g.Println("The {} retaliates, dealing {} damage!", npc.Name, damage)
 				player.HP -= damage
 			case StateDefending:
-				heal := Int(10).RandomRange(20)
-				Println("The {} focuses and recovers {} HP.", npc.Name, heal)
+				heal := g.Int(10).RandomRange(20)
+				g.Println("The {} focuses and recovers {} HP.", npc.Name, heal)
 				npc.HP += heal
 				npcBrain.Trigger(EventRecover) // After healing, it tries to go back to attacking.
 			case StateEnraged:
-				damage := Int(10).RandomRange(25)
-				Println("The {} attacks with fury, dealing {} damage!", npc.Name, damage)
+				damage := g.Int(10).RandomRange(25)
+				g.Println("The {} attacks with fury, dealing {} damage!", npc.Name, damage)
 				player.HP -= damage
 			}
 		}
@@ -177,10 +177,10 @@ func main() {
 	}
 
 	// --- Step 8: End of the Battle ---
-	Println("\n--- Battle Over ---")
+	g.Println("\n--- Battle Over ---")
 	if player.HP > 0 {
-		Println("You are victorious!")
+		g.Println("You are victorious!")
 	} else {
-		Println("You have been defeated...")
+		g.Println("You have been defeated...")
 	}
 }

@@ -7,7 +7,7 @@ package fsm
 import (
 	"fmt"
 
-	. "github.com/enetx/g"
+	"github.com/enetx/g"
 )
 
 // Interface compliance check.
@@ -18,11 +18,11 @@ func New(initial State) *FSM {
 	return &FSM{
 		initial:      initial,
 		current:      initial,
-		history:      Slice[State]{initial},
-		transitions:  NewMap[State, Slice[transition]](),
-		onEnter:      NewMap[State, Slice[Callback]](),
-		onExit:       NewMap[State, Slice[Callback]](),
-		onTransition: NewSlice[TransitionHook](),
+		history:      g.Slice[State]{initial},
+		transitions:  g.NewMap[State, g.Slice[transition]](),
+		onEnter:      g.NewMap[State, g.Slice[Callback]](),
+		onExit:       g.NewMap[State, g.Slice[Callback]](),
+		onTransition: g.NewSlice[TransitionHook](),
 		ctx:          newContext(initial),
 	}
 }
@@ -32,7 +32,7 @@ func (f *FSM) Clone() *FSM {
 	return &FSM{
 		initial:      f.initial,
 		current:      f.initial,
-		history:      Slice[State]{f.initial},
+		history:      g.Slice[State]{f.initial},
 		transitions:  f.transitions,
 		onEnter:      f.onEnter,
 		onExit:       f.onExit,
@@ -51,13 +51,13 @@ func (f *FSM) Context() *Context { return f.ctx }
 func (f *FSM) Current() State { return f.current }
 
 // History returns a copy of the list of previously visited states.
-func (f *FSM) History() Slice[State] { return f.history.Clone() }
+func (f *FSM) History() g.Slice[State] { return f.history.Clone() }
 
 // Reset resets the FSM to its initial state and clears all context data.
 func (f *FSM) Reset() {
 	f.current = f.initial
 	f.ctx = newContext(f.initial)
-	f.history = Slice[State]{f.initial}
+	f.history = g.Slice[State]{f.initial}
 }
 
 // SetState manually sets the current state, without triggering any callbacks or guards.
@@ -71,8 +71,8 @@ func (f *FSM) SetState(s State) {
 }
 
 // States returns a slice of all unique states defined in the FSM's transitions.
-func (f *FSM) States() Slice[State] {
-	stateSet := NewSet[State]()
+func (f *FSM) States() g.Slice[State] {
+	stateSet := g.NewSet[State]()
 	stateSet.Insert(f.initial)
 
 	for state, transitions := range f.transitions.Iter() {
@@ -94,7 +94,7 @@ func (f *FSM) Transition(from State, event Event, to State) *FSM {
 func (f *FSM) TransitionWhen(from State, event Event, to State, guard GuardFunc) *FSM {
 	entry := f.transitions.Entry(from)
 	entry.OrDefault()
-	entry.Transform(func(s Slice[transition]) Slice[transition] {
+	entry.Transform(func(s g.Slice[transition]) g.Slice[transition] {
 		return s.Append(transition{event: event, to: to, guard: guard})
 	})
 
@@ -105,7 +105,7 @@ func (f *FSM) TransitionWhen(from State, event Event, to State, guard GuardFunc)
 func (f *FSM) OnEnter(state State, cb Callback) *FSM {
 	entry := f.onEnter.Entry(state)
 	entry.OrDefault()
-	entry.Transform(func(cbs Slice[Callback]) Slice[Callback] { return cbs.Append(cb) })
+	entry.Transform(func(cbs g.Slice[Callback]) g.Slice[Callback] { return cbs.Append(cb) })
 
 	return f
 }
@@ -114,7 +114,7 @@ func (f *FSM) OnEnter(state State, cb Callback) *FSM {
 func (f *FSM) OnExit(state State, cb Callback) *FSM {
 	entry := f.onExit.Entry(state)
 	entry.OrDefault()
-	entry.Transform(func(cbs Slice[Callback]) Slice[Callback] { return cbs.Append(cb) })
+	entry.Transform(func(cbs g.Slice[Callback]) g.Slice[Callback] { return cbs.Append(cb) })
 
 	return f
 }
