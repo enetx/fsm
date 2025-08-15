@@ -8,6 +8,9 @@ This library provides a simple yet powerful API for defining states and transiti
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/enetx/fsm.svg)](https://pkg.go.dev/github.com/enetx/fsm)
 [![Go Report Card](https://goreportcard.com/badge/github.com/enetx/fsm)](https://goreportcard.com/report/github.com/enetx/fsm)
+[![Coverage Status](https://coveralls.io/repos/github/enetx/fsm/badge.svg?branch=main&service=github)](https://coveralls.io/github/enetx/fsm?branch=main)
+[![Go](https://github.com/enetx/fsm/actions/workflows/go.yml/badge.svg)](https://github.com/enetx/fsm/actions/workflows/go.yml)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/enetx/fsm)
 
 ## Features
 
@@ -237,6 +240,46 @@ if err != nil {
 fmt.Println(restoredFSM.Current())
 ```
 **Note**: Serialization only saves the FSM's state (`current`, `history`, `Data`, `Meta`). It does not save the transition rules or callbacks. You must configure the FSM template before unmarshaling. If you need a thread-safe FSM after restoring, call `.Sync()` *after* `json.Unmarshal`.
+
+### Visual Generator (Web UI)
+
+An in-browser FSM editor and Go code generator for this library.
+
+[Open the Online Generator →](https://enetx.github.io/fsm/visual_generator/)
+
+- 100% client-side (no data sent anywhere).
+- Draw states and transitions, set callbacks and guards, then generate ready-to-use Go code for github.com/enetx/fsm.
+
+#### Controls
+- Double-click empty canvas — add a state.
+- Double-click state/transition — rename state / edit event name.
+- Shift + drag from one state to another — create a transition (self-loops supported).
+- Right-click state — context menu (Set as Initial / Delete).
+- Drag on empty canvas — rectangular multi-select; then use Align X, Align Y, Stack.
+- Esc — cancel linking / clear selection.
+
+#### Properties & Panels
+- State properties: name, color, OnEnter, OnExit, “Final state”, and “Set as Initial”.
+- Transition properties: event name and optional guard function.
+- Events panel: shows incoming/outgoing events for the selected state (guards are italicized).
+
+#### Generate Go Code
+Click “Generate Go Code” to get a self-contained example:
+- Declares const States and Events.
+- Builds an FSM via fsm.New(initial) with .Transition(...) / .TransitionWhen(..., guard).
+- Attaches callbacks with .OnEnter(...) / .OnExit(...).
+- Emits function stubs for every referenced callback/guard (once per unique name).
+
+Note: You must set an initial state before generating code. Callback/guard names you type in the UI become function names in the output.
+
+#### Import / Export
+- Export JSON — downloads fsm.json with positions, colors, callbacks, guards, transitions, and initial state.
+- Import JSON — loads a saved model. If positions are missing, the tool auto-lays out nodes.
+
+#### Validation & Hints
+- State names must be unique (enforced by the editor).
+- Warns about unreachable states.
+- Guarded transitions are rendered with dashed lines and a diamond arrowhead.
 
 ### Visualization
 

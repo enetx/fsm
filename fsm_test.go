@@ -303,3 +303,211 @@ func TestFSM_OnTransitionError(t *testing.T) {
 	assertError(t, err)
 	assertTrue(t, strings.Contains(err.Error(), "hook failed"))
 }
+
+// Test error types coverage
+func TestFSM_ErrorTypes(t *testing.T) {
+	// Test ErrInvalidTransition.Error()
+	err := &ErrInvalidTransition{From: "a", Event: "invalid"}
+	expected := `fsm: no matching transition for event "invalid" from state "a"`
+	assertEqual(t, err.Error(), expected)
+
+	// Test ErrCallback.Error() with state
+	callbackErr := &ErrCallback{HookType: "OnEnter", State: "test", Err: fmt.Errorf("test error")}
+	expected = `fsm: error in OnEnter callback for state "test": test error`
+	assertEqual(t, callbackErr.Error(), expected)
+
+	// Test ErrCallback.Error() without state
+	callbackErr = &ErrCallback{HookType: "OnTransition", State: "", Err: fmt.Errorf("hook error")}
+	expected = `fsm: error in OnTransition hook: hook error`
+	assertEqual(t, callbackErr.Error(), expected)
+
+	// Test ErrCallback.Unwrap()
+	originalErr := fmt.Errorf("original")
+	callbackErr = &ErrCallback{HookType: "OnEnter", State: "test", Err: originalErr}
+	assertEqual(t, callbackErr.Unwrap(), originalErr)
+}
+
+// Test FSM.Sync() method
+func TestFSM_Sync(t *testing.T) {
+	fsm := New("idle").Transition("idle", "start", "running")
+	syncFSM := fsm.Sync()
+
+	// Test all SyncFSM methods
+	assertEqual(t, syncFSM.Current(), State("idle"))
+	assertNoError(t, syncFSM.Trigger("start"))
+	assertEqual(t, syncFSM.Current(), State("running"))
+
+	// Test Context
+	ctx := syncFSM.Context()
+	ctx.Data.Set("test", "value")
+	assertEqual(t, syncFSM.Context().Data.Get("test").Unwrap(), "value")
+
+	// Test SetState
+	syncFSM.SetState("idle")
+	assertEqual(t, syncFSM.Current(), State("idle"))
+
+	// Test History
+	history := syncFSM.History()
+	assertTrue(t, history.Len() > 0)
+
+	// Test States
+	states := syncFSM.States()
+	assertTrue(t, states.Contains("idle"))
+	assertTrue(t, states.Contains("running"))
+
+	// Test Reset
+	syncFSM.Reset()
+	assertEqual(t, syncFSM.Current(), State("idle"))
+	assertEqual(t, syncFSM.History().Len(), 1)
+}
+
+// Test SyncFSM CallEnter
+func TestSyncFSM_CallEnter(t *testing.T) {
+	enterCalled := false
+	fsm := New("a").OnEnter("a", func(*Context) error {
+		enterCalled = true
+		return nil
+	})
+	syncFSM := fsm.Sync()
+
+	assertNoError(t, syncFSM.CallEnter("a"))
+	assertTrue(t, enterCalled)
+}
+
+// Test SyncFSM CallEnter with error
+func TestSyncFSM_CallEnterError(t *testing.T) {
+	fsm := New("a").OnEnter("a", func(*Context) error {
+		return fmt.Errorf("enter error")
+	})
+	syncFSM := fsm.Sync()
+
+	err := syncFSM.CallEnter("a")
+	assertError(t, err)
+	assertTrue(t, strings.Contains(err.Error(), "enter error"))
+}
+
+// Test SyncFSM serialization
+func TestSyncFSM_JSON(t *testing.T) {
+	template := New("a").Transition("a", "next", "b")
+	syncFSM := template.Sync()
+	syncFSM.Context().Data.Set("key", "value")
+	assertNoError(t, syncFSM.Trigger("next"))
+
+	// Test MarshalJSON
+	jsonData, err := syncFSM.MarshalJSON()
+	assertNoError(t, err)
+
+	// Test UnmarshalJSON
+	newSyncFSM := template.Sync()
+	err = newSyncFSM.UnmarshalJSON(jsonData)
+	assertNoError(t, err)
+
+	assertEqual(t, newSyncFSM.Current(), State("b"))
+	assertEqual(t, newSyncFSM.Context().Data.Get("key").Unwrap(), "value")
+}
+
+// Test SyncFSM ToDOT
+func TestSyncFSM_ToDOT(t *testing.T) {
+	fsm := New("a").Transition("a", "go", "b")
+	syncFSM := fsm.Sync()
+
+	dot := syncFSM.ToDOT()
+	assertTrue(t, dot.Contains("digraph FSM"))
+	assertTrue(t, dot.Contains(`"a"`))
+	assertTrue(t, dot.Contains(`"b"`))
+}
+
+// Test FSM.ToDOT() method
+func TestFSM_ToDOT(t *testing.T) {
+	fsm := New("idle").
+		Transition("idle", "start", "running").
+		Transition("running", "stop", "idle").
+		TransitionWhen("running", "pause", "paused", func(*Context) bool { return true }).
+		OnEnter("running", func(*Context) error { return nil }).
+		OnExit("idle", func(*Context) error { return nil })
+
+	dot := fsm.ToDOT()
+	assertTrue(t, dot.Contains("digraph FSM"))
+	assertTrue(t, dot.Contains(`"idle"`))
+	assertTrue(t, dot.Contains(`"running"`))
+	assertTrue(t, dot.Contains(`"paused"`))
+	assertTrue(t, dot.Contains("initial"))
+	assertTrue(t, dot.Contains("Legend"))
+	assertTrue(t, dot.Contains("(guarded)"))
+	assertTrue(t, dot.Contains("OnEnter"))
+	assertTrue(t, dot.Contains("OnExit"))
+}
+
+// Test CallEnter edge cases
+func TestFSM_CallEnterNonExistentState(t *testing.T) {
+	fsm := New("a")
+	err := fsm.CallEnter("nonexistent")
+	// CallEnter should succeed even for non-existent states (no callbacks to run)
+	assertNoError(t, err)
+}
+
+// Test JSON unmarshaling edge cases
+func TestFSM_UnmarshalJSONInvalidData(t *testing.T) {
+	fsm := New("a")
+
+	// Test invalid JSON
+	err := fsm.UnmarshalJSON([]byte("invalid json"))
+	assertError(t, err)
+
+	// Test missing fields
+	err = fsm.UnmarshalJSON([]byte("{}"))
+	assertError(t, err)
+}
+
+// Test Trigger edge cases - multiple valid transitions (ambiguous)
+func TestFSM_AmbiguousTransition(t *testing.T) {
+	fsm := New("a").
+		TransitionWhen("a", "go", "b", func(*Context) bool { return true }).
+		TransitionWhen("a", "go", "c", func(*Context) bool { return true })
+
+	err := fsm.Trigger("go")
+	assertError(t, err)
+	assertTrue(t, strings.Contains(err.Error(), "ambiguous transition"))
+}
+
+// Test remaining coverage in Trigger method
+func TestFSM_TriggerWithInput(t *testing.T) {
+	var received any
+	fsm := New("a").
+		Transition("a", "go", "b").
+		OnEnter("b", func(ctx *Context) error {
+			received = ctx.Input
+			return nil
+		})
+
+	// Test with single input (only first input is stored)
+	assertNoError(t, fsm.Trigger("go", "input1", "input2", 123))
+	assertEqual(t, received, "input1")
+}
+
+// Test OnTransition hook panic recovery
+func TestFSM_OnTransitionPanic(t *testing.T) {
+	fsm := New("a").
+		Transition("a", "go", "b").
+		OnTransition(func(_, _ State, _ Event, _ *Context) error {
+			panic("hook panic")
+		})
+
+	err := fsm.Trigger("go")
+	assertError(t, err)
+	assertTrue(t, strings.Contains(err.Error(), "panic"))
+	assertTrue(t, strings.Contains(err.Error(), "OnTransition"))
+}
+
+// Test UnmarshalJSON with unknown state in history
+func TestFSM_UnmarshalJSONUnknownStateInHistory(t *testing.T) {
+	fsm := New("a").Transition("a", "next", "b")
+
+	// JSON with unknown state in history
+	invalidJSON := `{"current": "a", "history": ["a", "unknown_state"], "context": {"data": {}, "meta": {}}}`
+
+	err := fsm.UnmarshalJSON([]byte(invalidJSON))
+	assertError(t, err)
+	assertTrue(t, strings.Contains(err.Error(), "unknown state"))
+	assertTrue(t, strings.Contains(err.Error(), "unknown_state"))
+}

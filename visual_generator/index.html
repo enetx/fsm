@@ -1,0 +1,1187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>FSM Visual Generator for Go</title>
+  <style>
+    :root {
+      --primary-color: #007bff;
+      --bg-color: #f8f9fa;
+      --text-color: #333;
+      --border-color: #ccc;
+      --node-regular-fill: #ffffff;
+      --node-current-fill: #dcedc8;
+      --node-final-fill: #eeeeee;
+      --node-border: #555;
+      --node-shadow: rgba(0, 0, 0, 0.1);
+      --transition-regular-color: #333;
+      --transition-guard-color: #d32f2f;
+      --node-selected-glow: rgba(0, 123, 255, 0.5);
+      --selection-rect-color: rgba(0, 123, 255, 0.2);
+      --selection-rect-border: #007bff;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      margin: 0; padding: 1.5rem; background-color: var(--bg-color);
+      color: var(--text-color); display: flex; flex-direction: column; gap: 1.5rem;
+    }
+    h1 { margin: 0; }
+    #container { display: flex; gap: 1rem; }
+    #canvas {
+      border: 1px solid var(--border-color); background-color: white;
+      width: 1000px; height: 500px;
+    }
+    #properties-panel, #events-panel {
+      width: 300px; padding: 1rem; border: 1px solid var(--border-color);
+      border-radius: 6px; background-color: white;
+    }
+    #properties-panel h2, #events-panel h2 { margin-top: 0; }
+    #properties-panel label { display: block; margin-bottom: 0.5rem; }
+    #properties-panel input[type="text"], #properties-panel input[type="color"], #properties-panel textarea {
+      width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid var(--border-color); border-radius: 4px;
+    }
+    #properties-panel input[type="checkbox"] { margin-right: 0.5rem; }
+    #properties-panel button { margin-top: 0.5rem; width: 100%; }
+    #code-container { position: relative; }
+    #code {
+      width: 100%; height: 300px; font-family: "SF Mono", "Fira Code", monospace; font-size: 14px;
+      padding: 1rem; border-radius: 6px; border: 1px solid var(--border-color);
+      box-sizing: border-box; white-space: pre; overflow: auto;
+    }
+    .controls { display: flex; gap: 1rem; flex-wrap: wrap; }
+    button {
+      padding: 10px 15px; border: 1px solid var(--primary-color); background-color: var(--primary-color);
+      color: white; border-radius: 5px; cursor: pointer; font-size: 1rem;
+      transition: background-color 0.2s, box-shadow 0.2s;
+    }
+    button:hover { background-color: #0056b3; }
+    button:active { box-shadow: inset 0 2px 4px rgba(0,0,0,0.1); }
+    button:disabled {
+      background-color: #cccccc; border-color: #cccccc; cursor: not-allowed;
+    }
+    #copyBtn {
+      position: absolute; top: 10px; right: 10px; padding: 5px 10px; font-size: 0.8rem;
+      background-color: #6c757d; border-color: #6c757d;
+    }
+    #copyBtn:hover { background-color: #5a6268; }
+    #hint { font-style: italic; color: #666; }
+    #contextMenu {
+      position: absolute; display: none; background: white; border: 1px solid #ccc;
+      box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.2); z-index: 1000; border-radius: 4px; overflow: hidden;
+    }
+    #contextMenu button {
+      display: block; width: 100%; padding: 8px 15px; border: none; background: none;
+      text-align: left; font-size: 0.9rem; color: var(--text-color);
+    }
+    #contextMenu button:hover { background: #eee; }
+    .inplace-input {
+      position: absolute; font: bold 14px sans-serif; text-align: center;
+      border: 1px solid var(--border-color); border-radius: 4px; padding: 2px;
+    }
+    #import-json-file { display: none; }
+    #events-panel ul { margin: 0; padding-left: 20px; }
+    #events-panel li { margin-bottom: 0.5rem; }
+    #events-panel .guard { color: var(--transition-guard-color); font-style: italic; }
+  </style>
+</head>
+<body>
+  <h1>FSM Visual Generator</h1>
+  <div id="hint">
+    💡 <b>Double-click:</b> add state or edit name. <b>Shift + Drag:</b> create transition. <b>Right-click on state:</b> menu. <b>Drag rectangle:</b> select multiple states, use align functions or stack on selection.
+  </div>
+  <div id="container">
+    <canvas id="canvas"></canvas>
+    <div id="properties-panel">
+      <h2>Properties</h2>
+      <div id="state-properties" style="display: none;">
+        <label>State Name: <input type="text" id="prop-state-name" /></label>
+        <label>onEnter Callback: <input type="text" id="prop-on-enter" placeholder="e.g., handleEnterState" /></label>
+        <label>onExit Callback: <input type="text" id="prop-on-exit" placeholder="e.g., handleExitState" /></label>
+        <label>Color: <input type="color" id="prop-state-color" /></label>
+        <label><input type="checkbox" id="prop-is-final"> Is Final State</label>
+        <button onclick="FSMEditor.setAsInitial()">Set as Initial</button>
+        <button onclick="FSMEditor.deleteSelected()">Delete</button>
+      </div>
+      <div id="transition-properties" style="display: none;">
+        <p>From: <span id="prop-from-state"></span></p>
+        <p>To: <span id="prop-to-state"></span></p>
+        <label>Event Name: <input type="text" id="prop-event-name" /></label>
+        <label>Guard Function: <input type="text" id="prop-guard" placeholder="e.g., isConditionMet" /></label>
+        <button onclick="FSMEditor.deleteSelected()">Delete</button>
+      </div>
+      <div id="multiple-selection" style="display: none;">
+        <p>Multiple items selected</p>
+      </div>
+      <div id="no-selection" style="display: block;">
+        <p>Select a state or transition to edit its properties.</p>
+      </div>
+    </div>
+    <div id="events-panel">
+      <h2>Events</h2>
+      <div id="events-content">
+        <p>Select a state to view its incoming and outgoing events.</p>
+      </div>
+    </div>
+  </div>
+  <div class="controls">
+    <button onclick="FSMEditor.generateCode()">🚀 Generate Go Code</button>
+    <button onclick="FSMEditor.exportToJSON()">💾 Export JSON</button>
+    <button onclick="document.getElementById('import-json-file').click()">📤 Import JSON</button>
+    <button onclick="FSMEditor.undo()">⟲</button>
+    <button onclick="FSMEditor.redo()">⟳</button>
+    <button id="align-horizontal" onclick="FSMEditor.alignHorizontalCenter()" disabled>↔ Align X</button>
+    <button id="align-vertical" onclick="FSMEditor.alignVerticalCenter()" disabled>↕ Align Y</button>
+    <button id="align-stack" onclick="FSMEditor.stackVertically()" disabled>↕ Stack</button>
+    <input type="file" id="import-json-file" accept=".json" />
+  </div>
+  <div id="code-container">
+    <textarea id="code" readonly placeholder="Your generated Go code will appear here..."></textarea>
+    <button id="copyBtn" onclick="FSMEditor.copyCode()">Copy</button>
+  </div>
+  <div id="contextMenu">
+    <button onclick="FSMEditor.deleteSelected()">🗑️ Delete</button>
+    <button onclick="FSMEditor.setAsInitial()">⭐ Set as Initial</button>
+  </div>
+
+  <script>
+    const FSMEditor = {
+      canvas: null,
+      ctx: null,
+      colors: {},
+      states: [],
+      transitions: [],
+      initialState: null,
+      selectedNodes: [],
+      selectedTransition: null,
+      draggingNode: null,
+      dragGroupOffsets: [],
+      startNodeForTransition: null,
+      editingElement: null,
+      history: [],
+      historyIndex: -1,
+      selectionRect: null,
+
+      dragOffset: { x: 0, y: 0 },
+      mousePos: { x: 0, y: 0 },
+      pendingAddPos: { x: 0, y: 0 },
+
+      init() {
+        this.canvas = document.getElementById('canvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.setupCanvasDPI();
+        this.loadColors();
+        this.addEventListeners();
+        this.updatePropertiesPanel();
+        this.draw();
+      },
+
+      setupCanvasDPI() {
+        const dpi = window.devicePixelRatio || 1;
+        const cssWidth = 1000;
+        const cssHeight = 500;
+        this.canvas.style.width = `${cssWidth}px`;
+        this.canvas.style.height = `${cssHeight}px`;
+        this.canvas.width = cssWidth * dpi;
+        this.canvas.height = cssHeight * dpi;
+        this.ctx.scale(dpi, dpi);
+        this.ctx.imageSmoothingEnabled = true;
+      },
+
+      loadColors() {
+        const style = getComputedStyle(document.documentElement);
+        this.colors = {
+          text: style.getPropertyValue('--text-color').trim(),
+          nodeRegularFill: style.getPropertyValue('--node-regular-fill').trim(),
+          nodeCurrentFill: style.getPropertyValue('--node-current-fill').trim(),
+          nodeFinalFill: style.getPropertyValue('--node-final-fill').trim(),
+          nodeBorder: style.getPropertyValue('--node-border').trim(),
+          nodeShadow: style.getPropertyValue('--node-shadow').trim(),
+          transitionRegular: style.getPropertyValue('--transition-regular-color').trim(),
+          transitionGuard: style.getPropertyValue('--transition-guard-color').trim(),
+          nodeSelectedGlow: style.getPropertyValue('--node-selected-glow').trim(),
+          selectionRectFill: style.getPropertyValue('--selection-rect-color').trim(),
+          selectionRectBorder: style.getPropertyValue('--selection-rect-border').trim(),
+        };
+      },
+
+      addEventListeners() {
+        this.canvas.addEventListener('mousedown', this.handleMouseDown.bind(this));
+        this.canvas.addEventListener('mouseup', this.handleMouseUp.bind(this));
+        this.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this));
+        this.canvas.addEventListener('dblclick', this.handleDblClick.bind(this));
+        this.canvas.addEventListener('contextmenu', this.handleContextMenu.bind(this));
+        this.canvas.addEventListener('click', this.handleClick.bind(this));
+
+        window.addEventListener('click', (e) => {
+          if (!e.target.closest('#contextMenu')) {
+            document.getElementById('contextMenu').style.display = 'none';
+          }
+        });
+        window.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') {
+            this.startNodeForTransition = null;
+            this.selectionRect = null;
+            this.clearInPlaceEdit();
+            this.draw();
+          } else if (e.ctrlKey && e.key === 'z') {
+            this.undo();
+          } else if (e.ctrlKey && e.key === 'y') {
+            this.redo();
+          }
+        });
+
+        ['prop-state-name', 'prop-on-enter', 'prop-on-exit', 'prop-is-final', 'prop-state-color'].forEach(id => {
+          document.getElementById(id)?.addEventListener('change', this.updateStateProperties.bind(this));
+        });
+        ['prop-event-name', 'prop-guard'].forEach(id => {
+          document.getElementById(id)?.addEventListener('change', this.updateTransitionProperties.bind(this));
+        });
+
+        document.getElementById('import-json-file').addEventListener('change', this.handleJSONImport.bind(this));
+      },
+
+      pushHistory() {
+        const snapshot = {
+          states: JSON.parse(JSON.stringify(this.states)),
+          transitions: JSON.parse(JSON.stringify(this.transitions.map(t => ({
+            id: t.id,
+            from: t.from.name,
+            to: t.to.name,
+            event: t.event,
+            guard: t.guard
+          })))),
+          initialState: this.initialState ? this.initialState.name : null
+        };
+        this.history = this.history.slice(0, this.historyIndex + 1);
+        this.history.push(snapshot);
+        this.historyIndex++;
+      },
+
+      undo() {
+        if (this.historyIndex > 0) {
+          this.historyIndex--;
+          const snapshot = this.history[this.historyIndex];
+          this.importFromJSON(snapshot);
+        }
+      },
+
+      redo() {
+        if (this.historyIndex < this.history.length - 1) {
+          this.historyIndex++;
+          const snapshot = this.history[this.historyIndex];
+          this.importFromJSON(snapshot);
+        }
+      },
+
+      deselectAll() {
+        this.selectedNodes = [];
+        this.selectedTransition = null;
+        this.updatePropertiesPanel();
+        console.log('Deselected all, selectedNodes:', this.selectedNodes);
+        this.draw();
+      },
+
+      handleDblClick(e) {
+        e.preventDefault();
+        this.pushHistory();
+        const pos = this.getCanvasPos(e);
+        const clickedNode = this.getNodeAt(pos.x, pos.y);
+        const clickedTransition = this.getTransitionAt(pos.x, pos.y);
+        if (!clickedNode && !clickedTransition) {
+          this.pendingAddPos = pos;
+          this.addNewState();
+        } else if (clickedNode) {
+          this.startInPlaceEdit(clickedNode, 'state');
+        } else if (clickedTransition) {
+          this.startInPlaceEdit(clickedTransition, 'transition');
+        }
+      },
+
+      handleClick(e) {
+        if (e.shiftKey) return;
+        const pos = this.getCanvasPos(e);
+        const clickedNode = this.getNodeAt(pos.x, pos.y);
+        const clickedTransition = this.getTransitionAt(pos.x, pos.y);
+        if (clickedNode) {
+          this.selectedNodes = [clickedNode];
+          this.selectedTransition = null;
+          console.log('Click selected node:', this.selectedNodes.map(s => s.name));
+        } else if (clickedTransition) {
+          this.selectedNodes = [];
+          this.selectedTransition = clickedTransition;
+          console.log('Click selected transition:', this.selectedTransition.event);
+        }
+        this.updatePropertiesPanel();
+        if (clickedNode) {
+          document.getElementById('prop-state-name').focus();
+        } else if (clickedTransition) {
+          document.getElementById('prop-event-name').focus();
+        }
+        this.draw();
+      },
+
+      handleMouseDown(e) {
+        e.preventDefault();
+        const pos = this.getCanvasPos(e);
+        const node = this.getNodeAt(pos.x, pos.y);
+        if (node) {
+          if (e.shiftKey) {
+            this.startNodeForTransition = node;
+            this.selectedNodes = [];
+            this.selectedTransition = null;
+          } else {
+            this.draggingNode = node;
+            if (this.selectedNodes.includes(node)) {
+              this.dragGroupOffsets = this.selectedNodes.map(s => ({
+                node: s,
+                offsetX: s.x - pos.x,
+                offsetY: s.y - pos.y
+              }));
+            } else {
+              this.selectedNodes = [node];
+              this.dragGroupOffsets = [{ node, offsetX: 0, offsetY: 0 }];
+              this.selectedTransition = null;
+            }
+            console.log('Mouse down, dragging nodes:', this.selectedNodes.map(s => s.name));
+          }
+        } else if (!e.shiftKey && !this.getTransitionAt(pos.x, pos.y)) {
+          this.selectionRect = { start: pos, end: pos };
+          this.selectedTransition = null;
+          console.log('Mouse down, starting selection rect, selectedNodes:', this.selectedNodes);
+        }
+        this.updatePropertiesPanel();
+        this.draw();
+      },
+
+      handleMouseUp(e) {
+        if (this.draggingNode) {
+          this.pushHistory();
+          this.draggingNode = null;
+          this.dragGroupOffsets = [];
+          this.updatePropertiesPanel();
+          console.log('Mouse up, dragging stopped, selectedNodes:', this.selectedNodes.map(s => s.name));
+          this.draw();
+          return;
+        }
+        if (this.startNodeForTransition) {
+          const pos = this.getCanvasPos(e);
+          const endNode = this.getNodeAt(pos.x, pos.y);
+          if (endNode && endNode !== this.startNodeForTransition) {
+            this.pushHistory();
+            this.selectedTransition = { from: this.startNodeForTransition, to: endNode };
+            this.addNewTransition();
+          }
+          this.startNodeForTransition = null;
+        }
+        if (this.selectionRect) {
+          const pos = this.getCanvasPos(e);
+          this.selectionRect.end = pos;
+          const left = Math.min(this.selectionRect.start.x, this.selectionRect.end.x);
+          const right = Math.max(this.selectionRect.start.x, this.selectionRect.end.x);
+          const top = Math.min(this.selectionRect.start.y, this.selectionRect.end.y);
+          const bottom = Math.max(this.selectionRect.start.y, this.selectionRect.end.y);
+          this.selectedNodes = this.states.filter(s => {
+            const withinX = s.x >= left && s.x <= right;
+            const withinY = s.y >= top && s.y <= bottom;
+            return withinX && withinY;
+          });
+          console.log('Mouse up, selected nodes:', this.selectedNodes.map(s => s.name));
+          this.selectionRect = null;
+          this.selectedTransition = null;
+          this.updatePropertiesPanel();
+        }
+        this.draw();
+      },
+
+      handleMouseMove(e) {
+        this.mousePos = this.getCanvasPos(e);
+        if (this.draggingNode) {
+          this.dragGroupOffsets.forEach(offset => {
+            offset.node.x = this.mousePos.x + offset.offsetX;
+            offset.node.y = this.mousePos.y + offset.offsetY;
+          });
+        } else if (this.selectionRect) {
+          this.selectionRect.end = this.mousePos;
+        }
+        const node = this.getNodeAt(this.mousePos.x, this.mousePos.y);
+        const transition = this.getTransitionAt(this.mousePos.x, this.mousePos.y);
+        this.canvas.style.cursor = node || transition ? 'pointer' : 'crosshair';
+        this.draw();
+      },
+
+      handleContextMenu(e) {
+        e.preventDefault();
+        const pos = this.getCanvasPos(e);
+        const node = this.getNodeAt(pos.x, pos.y);
+        if (node) {
+          if (!this.selectedNodes.includes(node)) {
+            this.selectedNodes = [node];
+            this.selectedTransition = null;
+            console.log('Context menu, selected node:', this.selectedNodes.map(s => s.name));
+          }
+          this.updatePropertiesPanel();
+          const menu = document.getElementById('contextMenu');
+          menu.style.left = `${e.clientX}px`;
+          menu.style.top = `${e.clientY}px`;
+          menu.style.display = 'block';
+        }
+        this.draw();
+      },
+
+      startInPlaceEdit(item, type) {
+        this.clearInPlaceEdit();
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'inplace-input';
+        input.value = type === 'state' ? item.name : item.event;
+        const rect = this.canvas.getBoundingClientRect();
+        const x = type === 'state' ? item.x : (item.from.x + item.to.x) / 2;
+        const y = type === 'state' ? item.y : (item.from.y + item.to.y) / 2 - 10;
+        input.style.left = `${rect.left + x - 50}px`;
+        input.style.top = `${rect.top + y - 10}px`;
+        input.style.width = '100px';
+        document.body.appendChild(input);
+        input.focus();
+        this.editingElement = { item, type, input };
+
+        input.addEventListener('blur', () => this.saveInPlaceEdit());
+        input.addEventListener('keypress', (e) => { if (e.key === 'Enter') this.saveInPlaceEdit(); });
+      },
+
+      saveInPlaceEdit() {
+        if (!this.editingElement) return;
+        this.pushHistory();
+        const { item, type, input } = this.editingElement;
+        const newValue = input.value.trim();
+        if (newValue) {
+          if (type === 'state') {
+            if (!this.states.some(s => s.name === newValue && s !== item)) {
+              item.name = newValue;
+            }
+          } else {
+            item.event = newValue;
+          }
+        }
+        this.clearInPlaceEdit();
+        this.updatePropertiesPanel();
+        this.draw();
+      },
+
+      clearInPlaceEdit() {
+        if (this.editingElement?.input) {
+          this.editingElement.input.remove();
+          this.editingElement = null;
+        }
+      },
+
+      updatePropertiesPanel() {
+        const stateProps = document.getElementById('state-properties');
+        const transProps = document.getElementById('transition-properties');
+        const multiSelection = document.getElementById('multiple-selection');
+        const noSelection = document.getElementById('no-selection');
+        const alignHorizontalBtn = document.getElementById('align-horizontal');
+        const alignVerticalBtn = document.getElementById('align-vertical');
+        const alignStackBtn = document.getElementById('align-stack');
+
+        stateProps.style.display = 'none';
+        transProps.style.display = 'none';
+        multiSelection.style.display = 'none';
+        noSelection.style.display = 'block';
+
+        console.log('Updating panel, selectedNodes:', this.selectedNodes.length, this.selectedNodes.map(s => s.name));
+
+        alignHorizontalBtn.disabled = this.selectedNodes.length <= 1;
+        alignVerticalBtn.disabled = this.selectedNodes.length <= 1;
+        alignStackBtn.disabled = this.selectedNodes.length <= 1;
+
+        if (this.selectedNodes.length === 1) {
+          stateProps.style.display = 'block';
+          noSelection.style.display = 'none';
+          const node = this.selectedNodes[0];
+          document.getElementById('prop-state-name').value = node.name;
+          document.getElementById('prop-state-color').value = node.color || this.colors.nodeRegularFill;
+          document.getElementById('prop-on-enter').value = node.onEnter || '';
+          document.getElementById('prop-on-exit').value = node.onExit || '';
+          document.getElementById('prop-is-final').checked = node.isFinal || false;
+        } else if (this.selectedNodes.length > 1) {
+          multiSelection.style.display = 'block';
+          noSelection.style.display = 'none';
+        } else if (this.selectedTransition) {
+          transProps.style.display = 'block';
+          noSelection.style.display = 'none';
+          document.getElementById('prop-from-state').textContent = this.selectedTransition.from.name;
+          document.getElementById('prop-to-state').textContent = this.selectedTransition.to.name;
+          document.getElementById('prop-event-name').value = this.selectedTransition.event || '';
+          document.getElementById('prop-guard').value = this.selectedTransition.guard || '';
+        }
+
+        this.updateEventsPanel();
+      },
+
+      updateEventsPanel() {
+        const eventsContent = document.getElementById('events-content');
+        eventsContent.innerHTML = '<p>Select a state to view its incoming and outgoing events.</p>';
+
+        if (this.selectedNodes.length === 1) {
+          const state = this.selectedNodes[0];
+          const outgoing = this.transitions.filter(t => t.from === state);
+          const incoming = this.transitions.filter(t => t.to === state);
+
+          let html = '<h3>Outgoing Events</h3>';
+          if (outgoing.length === 0) {
+            html += '<p>No outgoing events.</p>';
+          } else {
+            html += '<ul>';
+            outgoing.forEach(t => {
+              const guardText = t.guard ? ` <span class="guard">(guard: ${t.guard})</span>` : '';
+              html += `<li>${t.event} → ${t.to.name}${guardText}</li>`;
+            });
+            html += '</ul>';
+          }
+
+          html += '<h3>Incoming Events</h3>';
+          if (incoming.length === 0) {
+            html += '<p>No incoming events.</p>';
+          } else {
+            html += '<ul>';
+            incoming.forEach(t => {
+              const guardText = t.guard ? ` <span class="guard">(guard: ${t.guard})</span>` : '';
+              html += `<li>${t.event} from ${t.from.name}${guardText}</li>`;
+            });
+            html += '</ul>';
+          }
+
+          eventsContent.innerHTML = html;
+        }
+      },
+
+      updateStateProperties() {
+        if (this.selectedNodes.length !== 1) return;
+        this.pushHistory();
+        const node = this.selectedNodes[0];
+        const name = document.getElementById('prop-state-name').value.trim();
+        if (name && !this.states.some(s => s.name === name && s !== node)) {
+          node.name = name;
+        }
+        const color = document.getElementById('prop-state-color').value;
+        if (/^#[0-9A-Fa-f]{6}$/.test(color)) {
+          node.color = color;
+        } else {
+          node.color = this.colors.nodeRegularFill;
+        }
+        node.onEnter = document.getElementById('prop-on-enter').value.trim() || null;
+        node.onExit = document.getElementById('prop-on-exit').value.trim() || null;
+        node.isFinal = document.getElementById('prop-is-final').checked;
+        this.draw();
+      },
+
+      updateTransitionProperties() {
+        if (!this.selectedTransition) return;
+        this.pushHistory();
+        const event = document.getElementById('prop-event-name').value.trim();
+        if (event) this.selectedTransition.event = event;
+        this.selectedTransition.guard = document.getElementById('prop-guard').value.trim() || null;
+        this.draw();
+      },
+
+      addNewState() {
+        const name = `state${this.states.length + 1}`;
+        const newState = { id: Date.now(), name, x: this.pendingAddPos.x, y: this.pendingAddPos.y, color: this.colors.nodeRegularFill, onEnter: null, onExit: null, isFinal: false };
+        this.states.push(newState);
+        if (!this.initialState) this.initialState = newState;
+        this.selectedNodes = [newState];
+        this.selectedTransition = null;
+        this.updatePropertiesPanel();
+        document.getElementById('prop-state-name').focus();
+        this.draw();
+      },
+
+      addNewTransition() {
+        const event = `event${this.transitions.length + 1}`;
+        this.transitions.push({ id: Date.now(), ...this.selectedTransition, event, guard: null });
+        this.selectedNodes = [];
+        this.selectedTransition = this.transitions[this.transitions.length - 1];
+        this.updatePropertiesPanel();
+        document.getElementById('prop-event-name').focus();
+        this.draw();
+      },
+
+      deleteSelected() {
+        this.pushHistory();
+        if (this.selectedNodes.length > 0) {
+          this.states = this.states.filter(s => !this.selectedNodes.includes(s));
+          this.transitions = this.transitions.filter(t => !this.selectedNodes.includes(t.from) && !this.selectedNodes.includes(t.to));
+          if (this.selectedNodes.includes(this.initialState)) this.initialState = this.states[0] || null;
+          this.selectedNodes = [];
+        } else if (this.selectedTransition) {
+          this.transitions = this.transitions.filter(t => t.id !== this.selectedTransition.id);
+          this.selectedTransition = null;
+        }
+        this.updatePropertiesPanel();
+        this.draw();
+      },
+
+      setAsInitial() {
+        if (this.selectedNodes.length === 1) {
+          this.pushHistory();
+          this.initialState = this.selectedNodes[0];
+          this.draw();
+        }
+      },
+
+      alignHorizontalCenter() {
+        if (this.selectedNodes.length <= 1) return;
+        this.pushHistory();
+        const avgX = this.selectedNodes.reduce((sum, s) => sum + s.x, 0) / this.selectedNodes.length;
+        this.selectedNodes.forEach(s => { s.x = avgX; });
+        this.draw();
+      },
+
+      alignVerticalCenter() {
+        if (this.selectedNodes.length <= 1) return;
+        this.pushHistory();
+        const avgY = this.selectedNodes.reduce((sum, s) => sum + s.y, 0) / this.selectedNodes.length;
+        this.selectedNodes.forEach(s => { s.y = avgY; });
+        this.draw();
+      },
+
+      stackVertically() {
+        if (this.selectedNodes.length <= 1) return;
+        this.pushHistory();
+        const avgX = this.selectedNodes.reduce((sum, s) => sum + s.x, 0) / this.selectedNodes.length;
+        const minY = Math.min(...this.selectedNodes.map(s => s.y));
+        const spacing = 90;
+        this.selectedNodes.sort((a, b) => a.y - b.y).forEach((s, i) => {
+          s.x = avgX;
+          s.y = minY + i * spacing;
+        });
+        this.draw();
+      },
+
+      draw() {
+        const { ctx, canvas } = this;
+        const dpi = window.devicePixelRatio || 1;
+        ctx.clearRect(0, 0, canvas.width / dpi, canvas.height / dpi);
+        if (this.startNodeForTransition) this.drawPendingTransition();
+        if (this.selectionRect) this.drawSelectionRect();
+        this.drawTransitions();
+        this.drawStates();
+        console.log('Drawing, selectedNodes:', this.selectedNodes.map(s => s.name));
+      },
+
+      drawStates() {
+        this.states.forEach(s => {
+          const { ctx } = this;
+          const isSelected = this.selectedNodes.includes(s);
+          console.log(`Drawing state ${s.name}, selected: ${isSelected}`);
+          const radius = (s === this.draggingNode) ? 30 : 25;
+          ctx.save();
+          ctx.shadowColor = isSelected ? this.colors.nodeSelectedGlow : this.colors.nodeShadow;
+          ctx.shadowBlur = isSelected ? 10 : 5;
+          ctx.shadowOffsetY = isSelected ? 0 : 2;
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, radius, 0, Math.PI * 2);
+          if (s.color && !s.isFinal && s !== this.initialState) {
+            ctx.fillStyle = s.color;
+          } else if (s === this.initialState) {
+            ctx.fillStyle = this.colors.nodeCurrentFill;
+          } else if (s.isFinal) {
+            ctx.fillStyle = this.colors.nodeFinalFill;
+          } else {
+            ctx.fillStyle = this.colors.nodeRegularFill;
+          }
+          ctx.fill();
+          ctx.restore();
+
+          ctx.lineWidth = isSelected ? 3 : 2;
+          ctx.strokeStyle = this.colors.nodeBorder;
+          if (s.isFinal) {
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, radius + 3, 0, Math.PI * 2);
+            ctx.lineWidth = isSelected ? 3 : 2;
+            ctx.stroke();
+          } else {
+            ctx.stroke();
+          }
+
+          ctx.fillStyle = this.colors.text;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.font = 'bold 14px sans-serif';
+          const textMetrics = ctx.measureText(s.name);
+          const textWidth = textMetrics.width;
+          const textHeight = 14;
+          const maxWidth = radius * 2 - 10;
+          if (textWidth > maxWidth) {
+            ctx.beginPath();
+            const padding = 5;
+            const cornerRadius = 4;
+            const rectX = s.x - textWidth / 2 - padding;
+            const rectY = s.y - textHeight / 2 - padding;
+            const rectWidth = textWidth + 2 * padding;
+            const rectHeight = textHeight + 2 * padding;
+            ctx.moveTo(rectX + cornerRadius, rectY);
+            ctx.arcTo(rectX + rectWidth, rectY, rectX + rectWidth, rectY + rectHeight, cornerRadius);
+            ctx.arcTo(rectX + rectWidth, rectY + rectHeight, rectX, rectY + rectHeight, cornerRadius);
+            ctx.arcTo(rectX, rectY + rectHeight, rectX, rectY, cornerRadius);
+            ctx.arcTo(rectX, rectY, rectX + rectWidth, rectY, cornerRadius);
+            ctx.closePath();
+            ctx.fillStyle = 'white';
+            ctx.fill();
+            ctx.strokeStyle = this.colors.nodeBorder;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          }
+          ctx.fillStyle = this.colors.text;
+          ctx.fillText(s.name, s.x, s.y);
+        });
+      },
+
+      drawSelectionRect() {
+        const { ctx } = this;
+        ctx.save();
+        const left = Math.min(this.selectionRect.start.x, this.selectionRect.end.x);
+        const top = Math.min(this.selectionRect.start.y, this.selectionRect.end.y);
+        const width = Math.abs(this.selectionRect.end.x - this.selectionRect.start.x);
+        const height = Math.abs(this.selectionRect.end.y - this.selectionRect.start.y);
+        ctx.fillStyle = this.colors.selectionRectFill;
+        ctx.strokeStyle = this.colors.selectionRectBorder;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.rect(left, top, width, height);
+        ctx.fill();
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+      },
+
+      drawTransitions() {
+        const transitionGroups = {};
+        this.transitions.forEach(t => {
+          const key = t.from.id < t.to.id ? `${t.from.id}-${t.to.id}` : `${t.to.id}-${t.from.id}`;
+          if (!transitionGroups[key]) transitionGroups[key] = [];
+          transitionGroups[key].push(t);
+        });
+
+        Object.values(transitionGroups).forEach(group => {
+          group.forEach((t, i) => {
+            const { ctx } = this;
+            ctx.save();
+            ctx.strokeStyle = ctx.fillStyle = t.guard ? this.colors.transitionGuard : this.colors.transitionRegular;
+            ctx.setLineDash(t.guard ? [6, 4] : []);
+            ctx.lineWidth = t === this.selectedTransition ? 2.5 : 1.5;
+
+            const isSelfLoop = t.from.id === t.to.id;
+            const curve = isSelfLoop ? 0 : (group.length > 1 ? 0.2 * (Math.floor((i + 1) / 2)) * (i % 2 === 0 ? 1 : -1) : 0);
+
+            this.drawArrow(t.from, t.to, t, curve);
+            ctx.restore();
+          });
+        });
+      },
+
+      drawArrow(from, to, transition, curve = 0) {
+        const radius = 28;
+        const isSelfLoop = from.id === to.id;
+
+        if (isSelfLoop) {
+          const loopRadius = 25;
+          const loopCenter = {x: from.x, y: from.y - loopRadius - 5};
+          this.ctx.beginPath();
+          this.ctx.arc(loopCenter.x, loopCenter.y, loopRadius, Math.PI * 0.2, Math.PI * 0.8);
+          this.ctx.stroke();
+
+          const arrowAngle = Math.PI * 0.2;
+          const arrowPos = {x: loopCenter.x + loopRadius * Math.cos(arrowAngle), y: loopCenter.y + loopRadius * Math.sin(arrowAngle) };
+          if (transition.guard) this.drawDiamondHead(arrowPos.x, arrowPos.y, arrowAngle + Math.PI/2);
+          else this.drawArrowHead(arrowPos.x, arrowPos.y, arrowAngle + Math.PI/2);
+
+          this.drawTextOnTransition(transition.event, { x: loopCenter.x, y: loopCenter.y - loopRadius - 5 });
+        } else {
+          const dx = to.x - from.x, dy = to.y - from.y;
+          const angle = Math.atan2(dy, dx);
+
+          const start = { x: from.x + radius * Math.cos(angle), y: from.y + radius * Math.sin(angle) };
+          const end = { x: to.x - radius * Math.cos(angle), y: to.y - radius * Math.sin(angle) };
+
+          const midX = (start.x + end.x) / 2;
+          const midY = (start.y + end.y) / 2;
+          const controlX = midX - dy * curve;
+          const controlY = midY + dx * curve;
+
+          this.ctx.beginPath();
+          this.ctx.moveTo(start.x, start.y);
+          this.ctx.quadraticCurveTo(controlX, controlY, end.x, end.y);
+          this.ctx.stroke();
+
+          const arrowAngle = Math.atan2(end.y - controlY, end.x - controlX);
+          if (transition.guard) this.drawDiamondHead(end.x, end.y, arrowAngle);
+          else this.drawArrowHead(end.x, end.y, arrowAngle);
+
+          this.drawTextOnTransition(transition.event, {x: controlX, y: controlY});
+        }
+      },
+
+      drawTextOnTransition(text, pos) {
+        this.ctx.save();
+        this.ctx.translate(pos.x, pos.y);
+        this.ctx.font = '12px sans-serif';
+        const textMetrics = this.ctx.measureText(text);
+        const textWidth = textMetrics.width;
+        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+        this.ctx.fillRect(-textWidth/2 - 3, -10, textWidth + 6, 16);
+        this.ctx.fillStyle = this.ctx.strokeStyle;
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillText(text, 0, -1);
+        this.ctx.canvas.title = text;
+        this.ctx.restore();
+      },
+
+      drawArrowHead(x, y, angle) {
+        const headlen = 10;
+        this.ctx.beginPath();
+        this.ctx.moveTo(x, y);
+        this.ctx.lineTo(x - headlen * Math.cos(angle - Math.PI / 6), y - headlen * Math.sin(angle - Math.PI / 6));
+        this.ctx.lineTo(x - headlen * Math.cos(angle + Math.PI / 6), y - headlen * Math.sin(angle + Math.PI / 6));
+        this.ctx.closePath();
+        this.ctx.fill();
+      },
+
+      drawDiamondHead(x, y, angle) {
+        const size = 6;
+        this.ctx.save();
+        this.ctx.translate(x, y);
+        this.ctx.rotate(angle);
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, 0);
+        this.ctx.lineTo(-size, -size);
+        this.ctx.lineTo(-size * 2, 0);
+        this.ctx.lineTo(-size, size);
+        this.ctx.closePath();
+        this.ctx.fill();
+        this.ctx.restore();
+      },
+
+      drawPendingTransition() {
+        this.ctx.beginPath();
+        this.ctx.moveTo(this.startNodeForTransition.x, this.startNodeForTransition.y);
+        this.ctx.lineTo(this.mousePos.x, this.mousePos.y);
+        this.ctx.strokeStyle = '#aaa';
+        this.ctx.setLineDash([8, 4]);
+        this.ctx.lineWidth = 2;
+        this.ctx.stroke();
+        this.ctx.setLineDash([]);
+      },
+
+      getCanvasPos(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      },
+
+      getNodeAt(x, y) {
+        return this.states.find(s => Math.hypot(s.x - x, s.y - y) < 28);
+      },
+
+      getTransitionAt(x, y) {
+        for (const t of this.transitions) {
+          const isSelfLoop = t.from.id === t.to.id;
+          let midX, midY;
+          if (isSelfLoop) {
+            midX = t.from.x;
+            midY = t.from.y - 28 - 25;
+          } else {
+            const groupKey = t.from.id < t.to.id ? `${t.from.id}-${t.to.id}` : `${t.to.id}-${t.from.id}`;
+            const group = this.transitions.filter(tr => (tr.from.id < tr.to.id ? `${tr.from.id}-${tr.to.id}` : `${tr.to.id}-${tr.from.id}`) === groupKey);
+            const index = group.findIndex(tr => tr.id === t.id);
+            const curve = group.length > 1 ? 0.2 * Math.floor((index + 1) / 2) * (index % 2 === 0 ? 1 : -1) : 0;
+            const dx = t.to.x - t.from.x, dy = t.to.y - t.from.y;
+            const angle = Math.atan2(dy, dx);
+            const start = { x: t.from.x + 28 * Math.cos(angle), y: t.from.y + 28 * Math.sin(angle) };
+            const end = { x: t.to.x - 28 * Math.cos(angle), y: t.to.y - 28 * Math.sin(angle) };
+            midX = (start.x + end.x) / 2 - dy * curve;
+            midY = (start.y + end.y) / 2 + dx * curve;
+          }
+          if (Math.hypot(x - midX, y - midY) < 20) return t;
+        }
+        return null;
+      },
+
+      initializePositions() {
+        const width = this.canvas.width / (window.devicePixelRatio || 1);
+        const height = this.canvas.height / (window.devicePixelRatio || 1);
+        const cols = Math.ceil(Math.sqrt(this.states.length));
+        const rows = Math.ceil(this.states.length / cols);
+        const cellWidth = (width - 100) / cols;
+        const cellHeight = (height - 100) / rows;
+        this.states.forEach((s, i) => {
+          const row = Math.floor(i / cols);
+          const col = i % cols;
+          s.x = 50 + col * cellWidth + cellWidth / 2;
+          s.y = 50 + row * cellHeight + cellHeight / 2;
+        });
+        console.log('Initial positions:', this.states.map(s => ({ name: s.name, x: s.x, y: s.y })));
+      },
+
+      forceDirectedLayout() {
+        const width = this.canvas.width / (window.devicePixelRatio || 1);
+        const height = this.canvas.height / (window.devicePixelRatio || 1);
+        const k = Math.sqrt((width * height) / this.states.length) * 0.5;
+        const iterations = 300;
+        const repulsion = 1500;
+        const attraction = 0.03;
+        const damping = 0.9;
+        const minDistance = 60;
+
+        this.states.forEach(s => {
+          s.vx = 0;
+          s.vy = 0;
+        });
+
+        for (let i = 0; i < iterations; i++) {
+          this.states.forEach(s1 => {
+            this.states.forEach(s2 => {
+              if (s1 !== s2) {
+                const dx = s1.x - s2.x;
+                const dy = s1.y - s2.y;
+                const distance = Math.max(Math.hypot(dx, dy), 0.1);
+                const force = repulsion / (distance * distance);
+                const fx = (dx / distance) * force;
+                const fy = (dy / distance) * force;
+                s1.vx += fx;
+                s1.vy += fy;
+                s2.vx -= fx;
+                s2.vy -= fy;
+              }
+            });
+          });
+
+          this.transitions.forEach(t => {
+            const dx = t.to.x - t.from.x;
+            const dy = t.to.y - t.from.y;
+            const distance = Math.max(Math.hypot(dx, dy), 0.1);
+            const force = attraction * (distance - k);
+            const fx = (dx / distance) * force;
+            const fy = (dy / distance) * force;
+            t.from.vx += fx;
+            t.from.vy += fy;
+            t.to.vx -= fx;
+            t.to.vy -= fy;
+          });
+
+          this.states.forEach(s => {
+            s.x += s.vx * damping;
+            s.y += s.vy * damping;
+            s.vx *= damping;
+            s.vy *= damping;
+            const padding = 50;
+            s.x = Math.max(padding, Math.min(width - padding, s.x));
+            s.y = Math.max(padding, Math.min(height - padding, s.y));
+          });
+
+          this.states.forEach(s1 => {
+            this.states.forEach(s2 => {
+              if (s1 !== s2) {
+                const dx = s1.x - s2.x;
+                const dy = s1.y - s2.y;
+                const distance = Math.hypot(dx, dy);
+                if (distance < minDistance) {
+                  const overlap = (minDistance - distance) / 2;
+                  const fx = (dx / distance) * overlap || 0;
+                  const fy = (dy / distance) * overlap || 0;
+                  s1.x += fx;
+                  s1.y += fy;
+                  s2.x -= fx;
+                  s2.y -= fy;
+                }
+              }
+            });
+          });
+        }
+
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        this.states.forEach(s => {
+          minX = Math.min(minX, s.x);
+          maxX = Math.max(maxX, s.x);
+          minY = Math.min(minY, s.y);
+          maxY = Math.max(maxY, s.y);
+        });
+        const offsetX = (width - (maxX + minX)) / 2;
+        const offsetY = (height - (maxY + minY)) / 2;
+        this.states.forEach(s => {
+          s.x += offsetX;
+          s.y += offsetY;
+        });
+
+        console.log('Final positions:', this.states.map(s => ({ name: s.name, x: s.x, y: s.y })));
+      },
+
+      handleJSONImport(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            this.pushHistory();
+            const json = JSON.parse(reader.result);
+            console.log('Imported JSON:', json);
+            this.importFromJSON(json);
+          } catch (err) {
+            console.error('Invalid JSON file:', err);
+            alert('Invalid JSON file');
+          }
+        };
+        reader.readAsText(file);
+      },
+
+      importFromJSON(json) {
+        if (!json.states || !Array.isArray(json.states) || !json.transitions || !Array.isArray(json.transitions)) {
+          console.error('Invalid JSON: missing states or transitions');
+          throw new Error('Invalid JSON: missing states or transitions');
+        }
+
+        const stateNames = json.states.map(s => s.name);
+        if (new Set(stateNames).size !== stateNames.length) {
+          console.error('Invalid JSON: duplicate state names');
+          throw new Error('Invalid JSON: duplicate state names');
+        }
+
+        this.states = json.states.map(s => ({
+          id: s.id || Date.now() + Math.random(),
+          name: s.name,
+          x: s.x || 0,
+          y: s.y || 0,
+          color: /^#[0-9A-Fa-f]{6}$/.test(s.color) ? s.color : this.colors.nodeRegularFill,
+          onEnter: s.onEnter || null,
+          onExit: s.onExit || null,
+          isFinal: s.isFinal || false
+        }));
+
+        this.transitions = json.transitions
+          .filter(t => t.from && t.to && t.event)
+          .map(t => {
+            const fromState = this.states.find(s => s.name === t.from);
+            const toState = this.states.find(s => s.name === t.to);
+            if (!fromState || !toState) {
+              console.warn(`Skipping transition: from=${t.from}, to=${t.to}, event=${t.event}`);
+              return null;
+            }
+            return {
+              id: t.id || Date.now() + Math.random(),
+              from: fromState,
+              to: toState,
+              event: t.event,
+              guard: t.guard || null
+            };
+          })
+          .filter(t => t);
+
+        this.initialState = json.initialState ? this.states.find(s => s.name === json.initialState) || null : null;
+
+        const reachableStates = new Set([this.initialState?.name]);
+        let changed = true;
+        while (changed) {
+          changed = false;
+          this.transitions.forEach(t => {
+            if (reachableStates.has(t.from.name) && !reachableStates.has(t.to.name)) {
+              reachableStates.add(t.to.name);
+              changed = true;
+            }
+          });
+        }
+        const unreachable = this.states.filter(s => !reachableStates.has(s.name));
+        if (unreachable.length > 0) {
+          console.warn('Unreachable states:', unreachable.map(s => s.name));
+          alert(`Warning: Some states are unreachable: ${unreachable.map(s => s.name).join(', ')}`);
+        }
+
+        if (!this.states.every(s => s.x && s.y && s.x >= 0 && s.y >= 0)) {
+          console.log('Invalid or missing positions, running initializePositions and force-directed layout');
+          this.initializePositions();
+          this.forceDirectedLayout();
+        }
+
+        this.selectedNodes = [];
+        this.selectedTransition = null;
+        this.updatePropertiesPanel();
+        this.draw();
+      },
+
+      exportToJSON() {
+        const data = {
+          states: this.states.map(s => ({
+            id: s.id,
+            name: s.name,
+            x: s.x,
+            y: s.y,
+            color: s.color,
+            onEnter: s.onEnter,
+            onExit: s.onExit,
+            isFinal: s.isFinal
+          })),
+          transitions: this.transitions.map(t => ({
+            id: t.id,
+            from: t.from.name,
+            to: t.to.name,
+            event: t.event,
+            guard: t.guard
+          })),
+          initialState: this.initialState ? this.initialState.name : null
+        };
+        console.log('Exported JSON:', data);
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'fsm.json';
+        a.click();
+        URL.revokeObjectURL(url);
+      },
+
+      generateCode() {
+        if (!this.initialState) { alert("Please set an initial state first (Right-click a state -> 'Set as Initial')."); return; }
+        const stateNames = this.states.map(s => s.name);
+        const eventNames = [...new Set(this.transitions.map(t => t.event))];
+        const callbacks = new Map();
+        this.states.forEach(s => {
+          if (s.onEnter) callbacks.set(s.onEnter, {type: 'OnEnter', state: s.name});
+          if (s.onExit) callbacks.set(s.onExit, {type: 'OnExit', state: s.name});
+        });
+        const guards = [...new Set(this.transitions.filter(t => t.guard).map(t => t.guard))];
+        const toPascalCase = s => s.replace(/(\w)(\w*)/g, (g0,g1,g2) => g1.toUpperCase() + g2.toLowerCase()).replace(/[\s-]/g, '');
+        let code = `package main\n\nimport (\n\t"fmt"\n\t"github.com/enetx/fsm"\n\t. "github.com/enetx/g"\n)\n\n// States\nconst (\n${stateNames.map(s => `    State${toPascalCase(s)} fsm.State = "${s}"`).join('\n')}\n)\n\n// Events\nconst (\n${eventNames.map(e => `    Event${toPascalCase(e)} fsm.Event = "${e}"`).join('\n')}\n)\n\nfunc main() {\n    fsmTemplate := fsm.New(State${toPascalCase(this.initialState.name)})\n`;
+        this.transitions.forEach(t => {
+          const from = `State${toPascalCase(t.from.name)}`;
+          const to = `State${toPascalCase(t.to.name)}`;
+          const event = `Event${toPascalCase(t.event)}`;
+          if (t.guard) code += `        .TransitionWhen(${from}, ${event}, ${to}, ${t.guard})\n`;
+          else code += `        .Transition(${from}, ${event}, ${to})\n`;
+        });
+        callbacks.forEach((cb, name) => { code += `        .${cb.type}(State${toPascalCase(cb.state)}, ${name})\n`; });
+        code += `\n    fmt.Println("FSM Initialized. Current state:", fsmTemplate.Current())\n}\n`;
+        [...new Set([...callbacks.keys(), ...guards])].forEach(name => {
+          const cb = callbacks.get(name);
+          if (cb) code += `\nfunc ${name}(ctx *fsm.Context) error {\n    fmt.Printf("${cb.type} state: %s\\n", ctx.State)\n    return nil\n}\n`;
+          else code += `\nfunc ${name}(ctx *fsm.Context) bool {\n    fmt.Printf("Executing guard: ${name}\\n")\n    return true\n}\n`;
+        });
+        document.getElementById('code').value = code;
+      },
+
+      copyCode() {
+        const code = document.getElementById('code').value;
+        if (!code) return;
+        navigator.clipboard.writeText(code).then(() => {
+          const btn = document.getElementById('copyBtn');
+          const originalText = btn.textContent;
+          btn.textContent = 'Copied!';
+          setTimeout(() => { btn.textContent = originalText; }, 2000);
+        }).catch(err => console.error('Failed to copy: ', err));
+      }
+    };
+
+    FSMEditor.init();
+  </script>
+</body>
+</html>
