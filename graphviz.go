@@ -30,9 +30,9 @@ func (f *FSM) ToDOT() g.String {
 				label += " (guarded)"
 			}
 
-			entry := grouped.Entry(key)
-			entry.OrDefault()
-			entry.Transform(func(s g.Slice[g.String]) g.Slice[g.String] { return s.Append(label) })
+			grouped.Entry(key).
+				AndModify(func(s *g.Slice[g.String]) { s.Push(label) }).
+				OrInsert(g.SliceOf(label))
 		}
 	}
 

@@ -92,29 +92,33 @@ func (f *FSM) Transition(from State, event Event, to State) *FSM {
 
 // TransitionWhen adds a guarded transition from -> event -> to.
 func (f *FSM) TransitionWhen(from State, event Event, to State, guard GuardFunc) *FSM {
-	entry := f.transitions.Entry(from)
-	entry.OrDefault()
-	entry.Transform(func(s g.Slice[transition]) g.Slice[transition] {
-		return s.Append(transition{event: event, to: to, guard: guard})
-	})
+	t := transition{
+		event: event,
+		to:    to,
+		guard: guard,
+	}
+
+	f.transitions.Entry(from).
+		AndModify(func(s *g.Slice[transition]) { s.Push(t) }).
+		OrInsert(g.SliceOf(t))
 
 	return f
 }
 
 // OnEnter registers a callback for when entering a given state.
 func (f *FSM) OnEnter(state State, cb Callback) *FSM {
-	entry := f.onEnter.Entry(state)
-	entry.OrDefault()
-	entry.Transform(func(cbs g.Slice[Callback]) g.Slice[Callback] { return cbs.Append(cb) })
+	f.onEnter.Entry(state).
+		AndModify(func(s *g.Slice[Callback]) { s.Push(cb) }).
+		OrInsert(g.SliceOf(cb))
 
 	return f
 }
 
 // OnExit registers a callback for when exiting a given state.
 func (f *FSM) OnExit(state State, cb Callback) *FSM {
-	entry := f.onExit.Entry(state)
-	entry.OrDefault()
-	entry.Transform(func(cbs g.Slice[Callback]) g.Slice[Callback] { return cbs.Append(cb) })
+	f.onExit.Entry(state).
+		AndModify(func(s *g.Slice[Callback]) { s.Push(cb) }).
+		OrInsert(g.Slice[Callback]{cb})
 
 	return f
 }

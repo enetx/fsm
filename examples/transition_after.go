@@ -96,19 +96,23 @@ func main() {
 
 		// This pattern is both concise and safe for cleaning up the timer.
 		//
-		// 1. `timerCancelFuncs.Entry(safeFSM).Delete()`: This is an atomic operation
-		//    that finds the entry for our FSM, removes it from the map, and returns
-		//    the `context.CancelFunc` wrapped in an `Option` type.
+		// 1. `timerCancelFuncs.Entry(safeFSM)`: Gets an Entry for our FSM key,
+		//    which can be either occupied (contains a value) or vacant (key not found).
 		//
-		// 2. `if cancel := ...; cancel.IsSome()`: This is the standard Go "if with a short
-		//    statement" combined with the `Option`'s safety check. The `IsSome()`
-		//    check ensures we only enter the `if` block if a cancel function was
-		//    actually found and removed. This prevents a panic if the key was missing.
+		// 2. `switch e := ... case g.OccupiedSafeEntry[...]`: Type switch that only
+		//    matches if the entry is occupied. If the key doesn't exist, none of the
+		//    cases match and we safely skip the cleanup (no panic).
 		//
-		// 3. `cancel.Some()()`: Inside the safe block, we unwrap the Option with `Some()`
-		//    and execute the `cancel` function, stopping the background goroutine.
-		if cancel := timerCancelFuncs.Entry(safeFSM).Delete(); cancel.IsSome() {
-			cancel.Some()()
+		// 3. `e.Remove()`: Atomically removes the entry from the map and returns
+		//    the stored cancel function. We check for nil before calling it.
+		//
+		// 4. `cancel()`: Executes the cancel function, stopping the background goroutine.
+
+		switch e := timerCancelFuncs.Entry(safeFSM).(type) {
+		case g.OccupiedSafeEntry[fsm.StateMachine, context.CancelFunc]:
+			if cancel := e.Remove(); cancel != nil {
+				cancel()
+			}
 		}
 
 		return nil
