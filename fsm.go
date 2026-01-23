@@ -149,7 +149,7 @@ func (f *FSM) Trigger(event Event, input ...any) error {
 		Exclude(func(t transition) bool { return t.event != event || (t.guard != nil && !t.guard(f.ctx)) }).
 		Collect()
 
-	if matched.Empty() {
+	if matched.IsEmpty() {
 		return &ErrInvalidTransition{From: f.current, Event: event}
 	}
 

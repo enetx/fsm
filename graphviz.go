@@ -65,7 +65,7 @@ func (f *FSM) ToDOT() g.String {
 			tooltips.Push("OnExit")
 		}
 
-		if tooltips.NotEmpty() {
+		if !tooltips.IsEmpty() {
 			attrs.Push(g.Format("tooltip=\"{}\"", tooltips.Join("\\n")))
 		}
 

@@ -69,11 +69,11 @@ func TestFSM_Guard(t *testing.T) {
 		})
 
 	ctx := testFSM.Context()
-	ctx.Meta.Set("ok", false)
+	ctx.Meta.Insert("ok", false)
 	assertError(t, testFSM.Trigger("go"))
 	assertFalse(t, called)
 
-	ctx.Meta.Set("ok", true)
+	ctx.Meta.Insert("ok", true)
 	assertNoError(t, testFSM.Trigger("go"))
 	assertTrue(t, called)
 	assertEqual(t, testFSM.Current(), State("done"))
@@ -104,7 +104,7 @@ func TestFSM_Reset(t *testing.T) {
 	fsm := New("a").
 		Transition("a", "next", "b")
 
-	fsm.Context().Data.Set("x", 123)
+	fsm.Context().Data.Insert("x", 123)
 	assertNoError(t, fsm.Trigger("next"))
 	assertEqual(t, fsm.Current(), State("b"))
 	assertEqual(t, fsm.Context().Data.Get("x").Unwrap(), 123)
@@ -215,7 +215,7 @@ func TestFSM_Serialization(t *testing.T) {
 		Transition("a", "next", "b")
 
 	fsm := template.Clone()
-	fsm.Context().Data.Set("user_id", 123)
+	fsm.Context().Data.Insert("user_id", 123)
 	assertNoError(t, fsm.Trigger("next"))
 
 	// Marshal the FSM to JSON.
@@ -339,7 +339,7 @@ func TestFSM_Sync(t *testing.T) {
 
 	// Test Context
 	ctx := syncFSM.Context()
-	ctx.Data.Set("test", "value")
+	ctx.Data.Insert("test", "value")
 	assertEqual(t, syncFSM.Context().Data.Get("test").Unwrap(), "value")
 
 	// Test SetState
@@ -390,7 +390,7 @@ func TestSyncFSM_CallEnterError(t *testing.T) {
 func TestSyncFSM_JSON(t *testing.T) {
 	template := New("a").Transition("a", "next", "b")
 	syncFSM := template.Sync()
-	syncFSM.Context().Data.Set("key", "value")
+	syncFSM.Context().Data.Insert("key", "value")
 	assertNoError(t, syncFSM.Trigger("next"))
 
 	// Test MarshalJSON
