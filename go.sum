@@ -1,7 +1,7 @@
 github.com/andybalholm/brotli v1.2.0 h1:ukwgCxwYrmACq68yiUqwIWnGY0cTPox/M94sVwToPjQ=
 github.com/andybalholm/brotli v1.2.0/go.mod h1:rzTDkvFWvIrjDXZHkuS16NPggd91W3kUSvPlQ1pLaKY=
-github.com/enetx/g v1.0.203 h1:oUsJ7VXCASBJFN+NHd7x7P7QFcORAarFISMt01sXWmw=
-github.com/enetx/g v1.0.203/go.mod h1:6/HQeRy+tIJVGY+oRPQVJ/vOSruAi0aldFggurT6jBY=
+github.com/enetx/g v1.0.205 h1:Dpm74xtAiVOA+jC4lszyIyBbXFMIBLAyKZ6BM/xYTAU=
+github.com/enetx/g v1.0.205/go.mod h1:6/HQeRy+tIJVGY+oRPQVJ/vOSruAi0aldFggurT6jBY=
 github.com/enetx/iter v0.0.0-20250912135656-f1583323588f h1:GUW+4AWfECIEJ9oAxgEAVGCpaozMCjRiUYnuR6Q0bCQ=
 github.com/enetx/iter v0.0.0-20250912135656-f1583323588f/go.mod h1:oMZN8hGLUpi7QBlMEUqailocNy0NFAO/7Lu+Nwh9HMM=
 github.com/klauspost/compress v1.18.3 h1:9PJRvfbmTabkOX8moIpXPbMMbYN60bWImDDU7L+/6zw=

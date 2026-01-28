@@ -23,7 +23,7 @@ func defineFSM() fsm.StateMachine {
 func main() {
 	myFSM := defineFSM()
 
-	myFSM.Context().Data.Set("processID", 12345)
+	myFSM.Context().Data.Insert("processID", 12345)
 
 	if err := myFSM.Trigger("start"); err != nil {
 		panic(err)

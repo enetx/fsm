@@ -33,7 +33,7 @@ func main() {
 		}).
 		OnEnter("published", func(ctx *fsm.Context) error {
 			// Set some metadata
-			ctx.Meta.Set("published_at", time.Now().UTC())
+			ctx.Meta.Insert("published_at", time.Now().UTC())
 			fmt.Println("-> ARTICLE PUBLISHED! Updating website...")
 			return nil
 		}).

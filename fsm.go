@@ -82,7 +82,7 @@ func (f *FSM) States() g.Slice[State] {
 		}
 	}
 
-	return stateSet.ToSlice()
+	return stateSet.Slice()
 }
 
 // Transition adds a basic transition (without a guard) from -> event -> to.

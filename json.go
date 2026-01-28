@@ -49,8 +49,8 @@ func (f *FSM) UnmarshalJSON(data []byte) error {
 	f.current = state.Current
 	f.history = state.History
 	f.ctx.State = state.Current
-	f.ctx.Data = state.Data.ToMapSafe()
-	f.ctx.Meta = state.Meta.ToMapSafe()
+	f.ctx.Data = state.Data.Safe()
+	f.ctx.Meta = state.Meta.Safe()
 
 	return nil
 }

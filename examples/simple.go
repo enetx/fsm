@@ -51,11 +51,11 @@ func main() {
 
 		switch fsm.Current() {
 		case "ask_name":
-			ctx.Data.Set("name", input)
+			ctx.Data.Insert("name", input)
 		case "ask_age":
-			ctx.Data.Set("age", input)
+			ctx.Data.Insert("age", input)
 		case "ask_lang":
-			ctx.Data.Set("lang", input)
+			ctx.Data.Insert("lang", input)
 		}
 
 		fsm.Trigger("input")

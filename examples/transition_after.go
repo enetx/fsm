@@ -57,7 +57,7 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 
 		// We store the `cancel` function so the OnExit callback can abort the timer early.
-		timerCancelFuncs.Set(safeFSM, cancel)
+		timerCancelFuncs.Insert(safeFSM, cancel)
 
 		// Launch the timer logic in a new goroutine so it doesn't block the FSM transition.
 		go func() {

@@ -114,8 +114,8 @@ func main() {
 
 	// We store the health values in the FSM's shared Context. This is how our Guard
 	// functions will be able to access the NPC's HP to make decisions.
-	npcBrain.Context().Data.Set("player_hp", player.HP)
-	npcBrain.Context().Data.Set("npc_hp", npc.HP)
+	npcBrain.Context().Data.Insert("player_hp", player.HP)
+	npcBrain.Context().Data.Insert("npc_hp", npc.HP)
 
 	g.Println("A wild {} appears!", npc.Name)
 	npcBrain.Trigger(EventEngage) // This trigger officially starts the fight.
@@ -136,7 +136,7 @@ func main() {
 			damage := g.Int(5).RandomRange(20)
 			g.Println("You strike the {} for {} damage!", npc.Name, damage)
 			npc.HP -= damage
-			npcBrain.Context().Data.Set("npc_hp", npc.HP) // Crucially, we update the HP in the FSM context.
+			npcBrain.Context().Data.Insert("npc_hp", npc.HP) // Crucially, we update the HP in the FSM context.
 
 			if npc.HP <= 0 {
 				npcBrain.Trigger(EventDefeated)

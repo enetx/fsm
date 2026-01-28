@@ -2,7 +2,7 @@ module github.com/enetx/fsm
 
 go 1.24.0
 
-require github.com/enetx/g v1.0.203
+require github.com/enetx/g v1.0.205
 
 require (
 	github.com/andybalholm/brotli v1.2.0 // indirect

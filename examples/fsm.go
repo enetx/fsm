@@ -22,7 +22,7 @@ func main() {
 		Transition("ask_name", "input", "ask_age").
 		// From ask_age to ask_lang only if the input is a valid number
 		TransitionWhen("ask_age", "input", "ask_lang", func(ctx *Context) bool {
-			return ctx.Input.(g.String).ToInt().IsOk()
+			return ctx.Input.(g.String).TryInt().IsOk()
 		}).
 		// After language input, go to confirm
 		Transition("ask_lang", "input", "confirm").
@@ -39,7 +39,7 @@ func main() {
 		// State entry callbacks:
 		// Ask name and record session start time
 		OnEnter("ask_name", func(ctx *Context) error {
-			ctx.Meta.Set("started_at", time.Now().Format(time.RFC822))
+			ctx.Meta.Insert("started_at", time.Now().Format(time.RFC822))
 			g.Println("Hi! What's your name?")
 			return nil
 		}).
@@ -91,11 +91,11 @@ func main() {
 		if event == "input" {
 			switch from {
 			case "ask_name":
-				ctx.Data.Set("name", ctx.Input)
+				ctx.Data.Insert("name", ctx.Input)
 			case "ask_age":
-				ctx.Data.Set("age", ctx.Input)
+				ctx.Data.Insert("age", ctx.Input)
 			case "ask_lang":
-				ctx.Data.Set("lang", ctx.Input)
+				ctx.Data.Insert("lang", ctx.Input)
 			}
 		}
 
